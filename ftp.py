@@ -19,8 +19,6 @@ TIMEOUT = _GLOBAL_DEFAULT_TIMEOUT
 
 ENCODING = "utf8"
 
-# 212.193.68.227
-
 
 class FTP:
     welcome = None
@@ -94,7 +92,8 @@ class FTP:
         print(rep)
         if not self.passive:
             self.data_socket = self.data_socket.accept()[0]
-        data = ''.join([part.decode(ENCODING) for part in self.get_binary_data()])
+        data = ''.join([part.decode(ENCODING)
+                        for part in self.get_binary_data()])
         self.data_socket.close()
         print(data)
         rep = self.get_reply()
