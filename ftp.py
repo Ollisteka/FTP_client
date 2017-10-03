@@ -61,14 +61,20 @@ class FTP:
         print(rep)
         self.binary = True
 
+    @staticmethod
+    def __get_filename(file_path):
+        split = os.path.split(file_path)
+        return split[len(split) - 1]
+
     def retr(self, file_path, new_path=None):
         if self.passive:
             self.pasv()
         else:
             self.port()
         if not new_path:
-            new_path = os.path.split(file_path)
-            new_path = new_path[len(new_path) - 1]
+            new_path = self.__get_filename(file_path)
+        if os.path.isdir(new_path):
+            new_path = os.path.join(new_path, self.__get_filename(file_path))
         size = self.size(file_path, silent=True)
         rep = self.send("RETR " + file_path + CRLF)
         print(rep)
