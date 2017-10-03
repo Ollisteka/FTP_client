@@ -27,11 +27,19 @@ class FTP:
     binary = False
 
     def quit(self):
+        """
+        End the session
+        :return:
+        """
         rep = self.send("QUIT" + CRLF)
         self.closed = True
         print(rep)
 
     def pasv(self):
+        """
+        Enters passive mode (server sends the IP)
+        :return:
+        """
         self.passive = True
         rep = self.send("PASV" + CRLF)
         print(rep)
@@ -43,6 +51,10 @@ class FTP:
         self.data_socket.connect((ip_address, port_number))
 
     def port(self):
+        """
+        Enters active mode (client sends the IP)
+        :return:
+        """
         ip_address = self.control_socket.getsockname()[0].split('.')
         self.data_socket = socket.socket()
         self.data_socket.bind(('', 0))
@@ -53,20 +65,44 @@ class FTP:
         print(reply)
 
     def cwd(self, directory):
+        """
+        Change directory
+        :param directory:
+        :return:
+        """
         rep = self.send("CWD " + directory + CRLF)
         print(rep)
 
     def type(self, con_type):
+        """
+        Set type of data transfer
+        :param con_type:
+        :return:
+        """
         rep = self.send("TYPE " + con_type + CRLF)
         print(rep)
         self.binary = True
 
     @staticmethod
     def __get_filename(file_path):
+        """
+        Extract file name from a path
+        :param file_path:
+        :return:
+        """
+        if os.path.isdir(file_path):
+            raise Exception("Name cannot be extracted, it's a directory")
         split = os.path.split(file_path)
         return split[len(split) - 1]
 
     def retr(self, file_path, new_path=None):
+        """
+        Download file from server file path to a new one
+        (or current working directory)
+        :param file_path:
+        :param new_path:
+        :return:
+        """
         if self.passive:
             self.pasv()
         else:
@@ -90,6 +126,10 @@ class FTP:
         print(rep)
 
     def list(self):
+        """
+        List of items in a current folder
+        :return:
+        """
         if self.passive:
             self.pasv()
         else:
@@ -107,10 +147,21 @@ class FTP:
         return data
 
     def user(self, name):
+        """
+        Send user's login
+        :param name:
+        :return:
+        """
         rep = self.send("USER " + name + CRLF)
         print(rep)
 
     def password(self, password=None):
+        """
+        Send user's password. To enter secure mode you must type PASS and
+        press enter.
+        :param password:
+        :return:
+        """
         if not password:
             password = getpass.getpass("Enter password: ")
             print()
@@ -118,6 +169,12 @@ class FTP:
         print(rep)
 
     def size(self, file_path, silent=False):
+        """
+        Learn a size of a file
+        :param file_path:
+        :param silent:
+        :return:
+        """
         if not self.binary:
             self.type("I")
         rep, size = self.send("SIZE " + file_path + CRLF).split(' ')
@@ -126,14 +183,27 @@ class FTP:
         return size
 
     def help(self):
+        """
+        Get a help message
+        :return:
+        """
         rep = self.send("HELP" + CRLF)
         print(rep)
 
     def send(self, command):
+        """
+        Send a command to server
+        :param command:
+        :return:
+        """
         self.control_socket.sendall(command.encode(ENCODING))
         return self.get_reply()
 
     def get_binary_data(self):
+        """
+        Get binary data piece by piece
+        :return:
+        """
         while True:
             try:
                 tmp = self.data_socket.recv(MAXLENGTH)
@@ -145,6 +215,10 @@ class FTP:
                 break
 
     def get_reply(self):
+        """
+        Get a reply from server
+        :return:
+        """
         reply = self.__get_full_reply()
         c = reply[:1]
         if c in {'1', '2', '3'}:
@@ -156,6 +230,10 @@ class FTP:
         raise ProtectedError(reply)
 
     def __get_full_reply(self):
+        """
+        Get a long reply
+        :return:
+        """
         reply = ''
         tmp = self.control_socket.recv(MAXLENGTH).decode(ENCODING)
         reply += tmp
@@ -202,11 +280,19 @@ class FTP:
                          }
 
     def connect(self):
+        """
+        Connect to the server and print welcome message
+        :return:
+        """
         self.control_socket.connect(self.address)
         self.welcome = self.get_reply()
         print("WELCOME: ", self.welcome)
 
     def run(self):
+        """
+        Runs an ftp client in console mode
+        :return:
+        """
         while not self.closed:
             print("Type a command:")
             inp = input().split(' ')
