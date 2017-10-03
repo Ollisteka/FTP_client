@@ -3,23 +3,19 @@
 import socket
 import os
 from socket import _GLOBAL_DEFAULT_TIMEOUT
-import sys
 import re
-import msvcrt
 import getpass
 import click
-import time
-from errors import all_errors, PermanentError, ProtectedError, ReplyError, TransientError
+from errors import PermanentError, ProtectedError, TransientError
 
-# The standard FTP server control port
+
 FTP_PORT = 21
-# The sizehint parameter passed to readline() calls
 MAXLENGTH = 8192
 
-# Line terminators
 CRLF = '\r\n'
 B_CRLF = b'\r\n'
-TIMEOUT = 1
+
+TIMEOUT = _GLOBAL_DEFAULT_TIMEOUT
 
 ENCODING = "utf8"
 
@@ -221,8 +217,3 @@ class FTP:
                     self.commands[command]()
             else:
                 print("UNKNOWN COMMAND")
-
-
-def extract_name(path):
-    path = path.split(os.pathsep)
-    return path[len(path) - 1]
