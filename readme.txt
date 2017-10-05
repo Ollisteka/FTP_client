@@ -14,3 +14,8 @@ FTP клиент
     Linux: python3 client.py --help
 Пример запуска: python client.py 212.193.68.227 21
 ----
+Требования:
+---
+Для работы прогресс бара при загрузке файлов необходим модуль click.
+Установка:
+    pip install -r requirements.txt
