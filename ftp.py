@@ -5,9 +5,13 @@ import os
 from socket import _GLOBAL_DEFAULT_TIMEOUT
 import re
 import getpass
-import click
 from errors import PermanentError, ProtectedError, TransientError
+from sys import platform
 
+if platform.startswith("linux"):
+    import click_package as click
+elif platform == "win32":
+    import click
 
 FTP_PORT = 21
 MAXLENGTH = 8192
