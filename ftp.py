@@ -187,6 +187,12 @@ class FTP:
         return rep
 
     def login(self, login, password):
+        """
+        Enters login and password simultaneously
+        :param login:
+        :param password:
+        :return:
+        """
         try:
             first_rep = self.user(login)
             second_rep = self.password(password)
