@@ -6,6 +6,7 @@ import sys
 from PyQt5 import QtWidgets, QtNetwork, QtCore, QtGui
 from errors import PermanentError
 
+
 class LoginWindow(QtWidgets.QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)

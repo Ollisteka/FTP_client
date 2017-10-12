@@ -311,7 +311,7 @@ class FTP:
                          # "NOOP" : self.noop,
                          "PASS": self.password,
                          "PASV": self.pasv,
-                         "PWD" : self.pwd,
+                         "PWD": self.pwd,
                          # "REIN" : self.rein,
                          "RETR": self.retr,
                          "PORT": self.port,
