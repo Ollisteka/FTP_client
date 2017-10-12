@@ -2,10 +2,10 @@
 
 import socket
 import os
-from socket import _GLOBAL_DEFAULT_TIMEOUT
+import threading
 import re
 import getpass
-from errors import PermanentError, ProtectedError, TransientError
+from errors import PermanentError, ProtectedError, TransientError, Error
 from sys import platform
 
 if platform.startswith("linux"):
@@ -19,8 +19,6 @@ MAXLENGTH = 8192
 CRLF = '\r\n'
 B_CRLF = b'\r\n'
 
-TIMEOUT = _GLOBAL_DEFAULT_TIMEOUT
-
 ENCODING = "utf8"
 
 
@@ -29,6 +27,7 @@ class FTP:
     data_socket = None
     closed = False
     binary = False
+    verbose = False
 
     def quit(self):
         """
@@ -37,7 +36,10 @@ class FTP:
         """
         rep = self.send("QUIT" + CRLF)
         self.closed = True
-        print(rep)
+        if self.data_socket:
+            self.data_socket.close()
+        self.control_socket.close()
+        return rep
 
     def pasv(self):
         """
@@ -46,13 +48,15 @@ class FTP:
         """
         self.passive = True
         rep = self.send("PASV" + CRLF)
-        print(rep)
+        if self.verbose:
+            print(rep)
         res = re.findall(r'(\d+),(\d+),(\d+),(\d+),(\d+),(\d+)', rep)[0]
         ip_address = '.'.join(res[:4])
         port_number = int(res[4]) * 256 + int(res[5])
         self.data_socket = socket.socket()
-        self.data_socket.settimeout(TIMEOUT)
+        self.data_socket.settimeout(2)
         self.data_socket.connect((ip_address, port_number))
+        return rep
 
     def port(self):
         """
@@ -66,7 +70,9 @@ class FTP:
         port = self.data_socket.getsockname()[1]
         splited_port = [str(port // 256), str(port % 256)]
         reply = self.send("PORT " + ','.join(ip_address + splited_port) + CRLF)
-        print(reply)
+        if self.verbose:
+            print(reply)
+        return reply
 
     def cwd(self, directory):
         """
@@ -75,7 +81,7 @@ class FTP:
         :return:
         """
         rep = self.send("CWD " + directory + CRLF)
-        print(rep)
+        return rep
 
     def type(self, con_type):
         """
@@ -84,8 +90,13 @@ class FTP:
         :return:
         """
         rep = self.send("TYPE " + con_type + CRLF)
-        print(rep)
-        self.binary = True
+        if con_type == "I":
+            self.binary = True
+        elif con_type == "A":
+            self.binary = False
+        else:
+            raise Exception("Only I or A arguments are approved")
+        return rep
 
     @staticmethod
     def __get_filename(file_path):
@@ -117,7 +128,8 @@ class FTP:
             new_path = os.path.join(new_path, self.__get_filename(file_path))
         size = self.size(file_path, silent=True)
         rep = self.send("RETR " + file_path + CRLF)
-        print(rep)
+        if self.verbose:
+            print(rep)
         if not self.passive:
             self.data_socket = self.data_socket.accept()[0]
         with click.progressbar(length=int(size), label="Downloading file ") as bar:
@@ -127,7 +139,7 @@ class FTP:
                     bar.update(len(part))
         self.data_socket.close()
         rep = self.get_reply()
-        print(rep)
+        return rep
 
     def list(self):
         """
@@ -139,15 +151,17 @@ class FTP:
         else:
             self.port()
         rep = self.send("LIST" + CRLF)
-        print(rep)
+        if self.verbose:
+            print(rep)
         if not self.passive:
             self.data_socket = self.data_socket.accept()[0]
         data = ''.join([part.decode(ENCODING)
                         for part in self.get_binary_data()])
         self.data_socket.close()
-        print(data)
         rep = self.get_reply()
-        print(rep)
+        if self.verbose:
+            print(data)
+            print(rep)
         return data
 
     def user(self, name):
@@ -157,7 +171,7 @@ class FTP:
         :return:
         """
         rep = self.send("USER " + name + CRLF)
-        print(rep)
+        return rep
 
     def password(self, password=None):
         """
@@ -170,7 +184,15 @@ class FTP:
             password = getpass.getpass("Enter password: ")
             print()
         rep = self.send("PASS " + password + CRLF)
-        print(rep)
+        return rep
+
+    def login(self, login, password):
+        try:
+            first_rep = self.user(login)
+            second_rep = self.password(password)
+            return first_rep + second_rep
+        except Error as e:
+            return "Login or password is incorrect"
 
     def size(self, file_path, silent=False):
         """
@@ -182,9 +204,17 @@ class FTP:
         if not self.binary:
             self.type("I")
         rep, size = self.send("SIZE " + file_path + CRLF).split(' ')
-        if not silent:
+        if not silent and self.verbose:
             print(rep + ' ' + size + 'bytes')
         return size
+
+    def pwd(self):
+        """
+        Get a current working directory
+        :return:
+        """
+        rep = self.send("PWD" + CRLF)
+        return rep
 
     def help(self):
         """
@@ -192,7 +222,7 @@ class FTP:
         :return:
         """
         rep = self.send("HELP" + CRLF)
-        print(rep)
+        return rep
 
     def send(self, command):
         """
@@ -200,7 +230,8 @@ class FTP:
         :param command:
         :return:
         """
-        self.control_socket.sendall(command.encode(ENCODING))
+        with threading.Lock():
+            self.control_socket.sendall(command.encode(ENCODING))
         return self.get_reply()
 
     def get_binary_data(self):
@@ -208,22 +239,24 @@ class FTP:
         Get binary data piece by piece
         :return:
         """
-        while True:
-            try:
-                tmp = self.data_socket.recv(MAXLENGTH)
-                if not tmp:
+        with threading.Lock():
+            while True:
+                try:
+                    tmp = self.data_socket.recv(MAXLENGTH)
+                    if not tmp:
+                        break
+                    yield tmp
+                except TimeoutError:
+                    print("Timeout!")
                     break
-                yield tmp
-            except TimeoutError:
-                print("Timeout!")
-                break
 
     def get_reply(self):
         """
         Get a reply from server
         :return:
         """
-        reply = self.__get_full_reply()
+        with threading.Lock():
+            reply = self.__get_full_reply()
         c = reply[:1]
         if c in {'1', '2', '3'}:
             return reply
@@ -251,8 +284,11 @@ class FTP:
                 break
         return reply
 
-    def __init__(self, address, port, passive=True):
-        self.address = (address, port)
+    def __init__(self, address=None, port=None, passive=True):
+        if not address and not port:
+            self.address = None
+        else:
+            self.address = (address, port)
         self.control_socket = socket.socket()
         self.passive = passive
         self.commands = {"QUIT": self.quit,
@@ -269,7 +305,7 @@ class FTP:
                          # "NOOP" : self.noop,
                          "PASS": self.password,
                          "PASV": self.pasv,
-                         # "PWD" : self.pwd,
+                         "PWD" : self.pwd,
                          # "REIN" : self.rein,
                          "RETR": self.retr,
                          "PORT": self.port,
@@ -283,20 +319,28 @@ class FTP:
                          "USER": self.user,
                          }
 
-    def connect(self):
+    def connect(self, address=None, port=None):
         """
         Connect to the server and print welcome message
         :return:
         """
+        if not self.address:
+            self.address = (address, port)
+        elif not address and not port and not self.address:
+            raise Exception("Address and port must be specified in "
+                            "constructor or in connect()")
         self.control_socket.connect(self.address)
         self.welcome = self.get_reply()
-        print("WELCOME: ", self.welcome)
+        if self.verbose:
+            print(self.welcome)
+        return "WELCOME: " + self.welcome
 
-    def run(self):
+    def run_batch(self):
         """
         Runs an ftp client in console mode
         :return:
         """
+        self.verbose = True
         while not self.closed:
             print("Type a command:")
             inp = input().split(' ')
@@ -305,10 +349,34 @@ class FTP:
             if command in self.commands:
                 if arguments:
                     if len(arguments) == 1:
-                        self.commands[command](arguments[0])
+                        print(self.commands[command](arguments[0]))
                     if len(arguments) == 2:
-                        self.commands[command](arguments[0], arguments[1])
+                        print(self.commands[command](arguments[0],
+                                                     arguments[1]))
                 else:
-                    self.commands[command]()
+                    print(self.commands[command]())
             else:
                 print("UNKNOWN COMMAND")
+
+    def run_gui(self, input_line):
+        """
+        Runs ftp in gui
+        :param input_line:
+        :return:
+        """
+        self.verbose = False
+        if self.closed:
+            return "Connection is closed!"
+        input_line = input_line.split(' ')
+        command = input_line[0]
+        arguments = input_line[1:]
+        if command in self.commands:
+            if arguments:
+                if len(arguments) == 1:
+                    return self.commands[command](arguments[0])
+                if len(arguments) == 2:
+                    return self.commands[command](arguments[0], arguments[1])
+            else:
+                return self.commands[command]()
+        else:
+            return "UNKNOWN COMMAND"
