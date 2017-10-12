@@ -23,7 +23,7 @@ def main():
 
     con = FTP(args.address, args.port, args.active)
     con.connect()
-    con.run()
+    con.run_batch()
 
 
 if __name__ == '__main__':
