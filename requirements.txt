@@ -1,1 +1,3 @@
+stubserver
+PyQt5
 click
