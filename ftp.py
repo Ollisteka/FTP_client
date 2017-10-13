@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
-import socket
-import os
-import threading
-import re
 import getpass
-from errors import PermanentError, ProtectedError, TransientError, Error
+import os
+import re
+import socket
+import threading
 from sys import platform
+
+from errors import PermanentError, ProtectedError, TransientError, Error
 
 if platform.startswith("linux"):
     import click_package as click
@@ -132,11 +133,17 @@ class FTP:
             print(rep)
         if not self.passive:
             self.data_socket = self.data_socket.accept()[0]
-        with click.progressbar(length=int(size), label="Downloading file ") as bar:
+        if self.verbose:
+            with click.progressbar(length=int(size),
+                                   label="Downloading file ") as bar:
+                with open(new_path, 'wb') as file:
+                    for part in self.get_binary_data():
+                        file.write(part)
+                        bar.update(len(part))
+        else:
             with open(new_path, 'wb') as file:
                 for part in self.get_binary_data():
                     file.write(part)
-                    bar.update(len(part))
         self.data_socket.close()
         rep = self.get_reply()
         return rep

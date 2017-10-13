@@ -1,10 +1,11 @@
 # !/usr/bin/env python3
+import sys
 import threading
 
-from ftp import FTP, FTP_PORT
-import sys
-from PyQt5 import QtWidgets, QtNetwork, QtCore, QtGui
+from PyQt5 import QtWidgets, QtCore
+
 from errors import PermanentError
+from ftp import FTP
 
 
 class LoginWindow(QtWidgets.QDialog):
@@ -64,25 +65,31 @@ class ConnectionWindow(QtWidgets.QDialog):
         self.setLayout(layout)
 
 
+class DownloadThread(QtCore.QObject):
+    sig_done = QtCore.pyqtSignal()
+
+    def __init__(self, ftp, path, filename):
+        super().__init__()
+        self._abort = False
+        self._ftp = ftp
+        self._path = path
+        self._filename = filename
+
+    @QtCore.pyqtSlot()
+    def work(self):
+        self._ftp.retr(self._path, self._filename)
+        self.sig_done.emit()
+
+
 class FTPWindow(QtWidgets.QMainWindow):
     thread = None
+    _last_file_downloaded = ""
 
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        """
-             0  1
-            +----+
-          0 |  : |
-            +--|-+
-          1 |  | |
-            +--|-+
-        """
         _layout = QtWidgets.QGridLayout()
         _layout.setSpacing(5)
-        # _layout.addWidget(self._messages, 0, 0, 1, 2)
-        # _layout.addWidget(self._input, 1, 0)
-        # _layout.addWidget(self._send_button, 1, 1)
         _window = QtWidgets.QWidget()
         _window.setLayout(_layout)
 
@@ -108,10 +115,7 @@ class FTPWindow(QtWidgets.QMainWindow):
     def closeEvent(self, event):
         if self.thread and self.thread.is_alive():
             text = "File is being downloaded. Please, wait for it to complete"
-            msg = QtWidgets.QMessageBox()
-            msg.setInformativeText(text)
-            msg.setWindowTitle("Please, wait")
-            msg.exec_()
+            show_message(text, "Please, wait")
             event.ignore()
             return
 
@@ -156,11 +160,23 @@ class FTPWindow(QtWidgets.QMainWindow):
                 "All Files (*);;Text Files (*.txt)",
                 options=options)
             if filename:
-                self.thread = threading.Thread(target=self._ftp.retr,
+                self.thread = threading.Thread(target=self._download,
                                                args=(path, filename))
-
                 self.thread.start()
+
         self._print_list()
+
+    def _download(self, path, filename):
+        self._last_file_downloaded = path
+        worker = DownloadThread(self._ftp, path, filename)
+        worker.sig_done.connect(self._file_downloaded)
+        worker.work()
+
+    @QtCore.pyqtSlot()
+    def _file_downloaded(self):
+        text = self._last_file_downloaded + \
+               " is downloaded.\nYou now can continue"
+        show_message(text, "Success")
 
     def get_params(self):
         self._con_dialog.show()
@@ -190,6 +206,13 @@ class FTPWindow(QtWidgets.QMainWindow):
             "Connected to: {}, {}".format(self._ip, self._port))
         self.statusBar().showMessage(self._ftp.connect(self._ip, self._port))
         self.login()
+
+
+def show_message(text, title):
+    msg = QtWidgets.QMessageBox()
+    msg.setInformativeText(text)
+    msg.setWindowTitle(title)
+    msg.exec_()
 
 
 def main():
