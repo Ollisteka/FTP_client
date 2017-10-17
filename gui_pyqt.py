@@ -66,8 +66,8 @@ class ConnectionWindow(QtWidgets.QDialog):
 
 
 class DownloadThread(QtCore.QObject):
-    sig_done = QtCore.pyqtSignal()
-    sig_step = QtCore.pyqtSignal()
+    sig_done = QtCore.pyqtSignal(str)
+    sig_step = QtCore.pyqtSignal(int)
 
     def __init__(self, ftp, path, filename):
         super().__init__()
@@ -76,27 +76,21 @@ class DownloadThread(QtCore.QObject):
         self._path = path
         self._filename = filename
 
-    @QtCore.pyqtSlot()
     def work(self):
         self._ftp.retr(self._path, self._filename, download_func=self.download)
 
-    @QtCore.pyqtSlot()
     def download(self, size, new_path, ftp):
-        """
-        Download with console progress bar
-        :return:
-        """
         downloaded = 0
         with open(new_path, 'wb') as file:
             for part in ftp.get_binary_data():
                 downloaded += len(part)
-                self.sig_step.emit(100 * downloaded / size)
+                self.sig_step.emit(100 * downloaded / int(size))
                 file.write(part)
+        self.sig_done.emit("Download of " + self._path + " is complete")
 
 
 class FTPWindow(QtWidgets.QMainWindow):
     thread = None
-    _last_file_downloaded = ""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -182,21 +176,18 @@ class FTPWindow(QtWidgets.QMainWindow):
         self._print_list()
 
     def _download(self, path, filename):
-        self._last_file_downloaded = path
         worker = DownloadThread(self._ftp, path, filename)
-        worker.sig_step.connect(self._on_part_dowloaded)
+        worker.sig_step.connect(self._on_part_downloaded)
         worker.sig_done.connect(self._file_downloaded)
         worker.work()
 
     @QtCore.pyqtSlot(int)
-    def _on_part_dowloaded(self, val):
-        self.progressBar.setValue(val)
+    def _on_part_downloaded(self, value):
+        self.progressBar.setValue(value)
 
-    @QtCore.pyqtSlot()
-    def _file_downloaded(self):
-        text = self._last_file_downloaded + \
-               " is downloaded.\nYou now can continue"
-        show_message(text, "Success")
+    @QtCore.pyqtSlot(str)
+    def _file_downloaded(self, value):
+        show_message(value, "Success")
 
     def get_params(self):
         self._con_dialog.show()
@@ -211,8 +202,7 @@ class FTPWindow(QtWidgets.QMainWindow):
         except Exception as e:
             self.statusBar().showMessage("Connection error: {}".format(e))
 
-        self.statusBar().showMessage(self._ftp.login(
-            self._username, self._password))
+        self._ftp.login(self._username, self._password)
         self._print_list()
 
     def _connect(self):
