@@ -4,6 +4,7 @@ import getpass
 import os
 import re
 import socket
+import tempfile
 import threading
 from sys import platform
 
@@ -39,6 +40,7 @@ class FTP:
         self.closed = True
         if self.data_socket:
             self.data_socket.close()
+        self.control_socket.shutdown(socket.SHUT_RDWR)
         self.control_socket.close()
         return rep
 
@@ -125,7 +127,10 @@ class FTP:
             self.port()
         if not new_path:
             new_path = self.__get_filename(file_path)
-        if os.path.isdir(new_path):
+
+        if isinstance(new_path ,tempfile._TemporaryFileWrapper):
+            pass
+        elif os.path.isdir(new_path):
             new_path = os.path.join(new_path, self.__get_filename(file_path))
         size = self.size(file_path, silent=True)
         rep = self.send("RETR " + file_path + CRLF)
