@@ -1,10 +1,13 @@
 # !/usr/bin/env python3
 import os
+import tempfile
 import unittest
 import unittest.mock as mock
-from ftp import FTP
-from errors import Error, ProtectedError, TransientError, PermanentError
+
 from stubserver import FTPStubServer
+
+from errors import PermanentError
+from ftp import FTP
 
 
 class TestWithStubServer(unittest.TestCase):
@@ -20,7 +23,6 @@ class TestWithStubServer(unittest.TestCase):
         self.server.stop()
 
     def test_list(self):
-
         fileA = "A.png"
         fileB = "B.png"
         self.server.add_file(fileA, "")
@@ -28,8 +30,19 @@ class TestWithStubServer(unittest.TestCase):
         listing = self.ftp.list()
         self.assertEqual(listing, fileA + '\n' + fileB)
 
-    def test_pasv(self):
+    # Sockets unclosed
+    def test_retr(self):
+        fileB = "B.png"
+        self.server.add_file(fileB, "asd")
+        temp = tempfile.NamedTemporaryFile(delete=False)
+        with mock.patch.object(self.ftp, 'size', return_value=12345):
+            self.ftp.retr(fileB, temp.name)
+        with open(temp.name, 'r') as file:
+            data = file.read()
+        self.assertEqual(data, "asd")
+        temp.close()
 
+    def test_pasv(self):
         reply = self.ftp.pasv()
         self.assertEqual(reply.startswith('227 Entering Passive Mode'), True)
 
@@ -70,9 +83,6 @@ class TestWithStubServer(unittest.TestCase):
         self.assertTrue(self.ftp.binary)
         with self.assertRaises(Exception):
             self.ftp.type("E")
-
-    def test_login(self):
-        pass
 
 
 if __name__ == '__main__':
