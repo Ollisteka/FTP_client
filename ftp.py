@@ -117,6 +117,8 @@ class FTP:
         """
         Download file from server file path to a new one
         (or current working directory)
+        :param download_func: how the file will be downloaded
+        :param output_func: where some output will go
         :param file_path:
         :param new_path:
         :return:
@@ -140,17 +142,6 @@ class FTP:
             output_func(rep)
         if not self.passive:
             self.data_socket = self.data_socket.accept()[0]
-        # if self.verbose:
-        #     with click.progressbar(length=int(size),
-        #                            label="Downloading file ") as bar:
-        #         with open(new_path, 'wb') as file:
-        #             for part in self.get_binary_data():
-        #                 file.write(part)
-        #                 bar.update(len(part))
-        # else:
-        #     with open(new_path, 'wb') as file:
-        #         for part in self.get_binary_data():
-        #             file.write(part)
         download_func(size, new_path, self)
         self.data_socket.close()
         rep = self.get_reply()
@@ -219,7 +210,8 @@ class FTP:
         """
         Learn a size of a file
         :param file_path:
-        :param silent:
+        :param silent: don't show the size directly
+        :param output_func: where some output will go
         :return:
         """
         if not self.binary:
