@@ -67,6 +67,7 @@ class ConnectionWindow(QtWidgets.QDialog):
 
 class DownloadThread(QtCore.QObject):
     sig_done = QtCore.pyqtSignal()
+    sig_step = QtCore.pyqtSignal()
 
     def __init__(self, ftp, path, filename):
         super().__init__()
@@ -77,8 +78,20 @@ class DownloadThread(QtCore.QObject):
 
     @QtCore.pyqtSlot()
     def work(self):
-        self._ftp.retr(self._path, self._filename)
-        self.sig_done.emit()
+        self._ftp.retr(self._path, self._filename, download_func=self.download)
+
+    @QtCore.pyqtSlot()
+    def download(self, size, new_path, ftp):
+        """
+        Download with console progress bar
+        :return:
+        """
+        downloaded = 0
+        with open(new_path, 'wb') as file:
+            for part in ftp.get_binary_data():
+                downloaded += len(part)
+                self.sig_step.emit(100 * downloaded / size)
+                file.write(part)
 
 
 class FTPWindow(QtWidgets.QMainWindow):
@@ -108,6 +121,8 @@ class FTPWindow(QtWidgets.QMainWindow):
         self._login_dialog.accepted.connect(self._login)
         self._login_dialog.rejected.connect(self.close)
 
+        self.progressBar = QtWidgets.QProgressBar()
+        self.statusBar().addPermanentWidget(self.progressBar)
         self.statusBar().showMessage("Waiting for params...")
 
         self._ftp = FTP()
@@ -169,8 +184,13 @@ class FTPWindow(QtWidgets.QMainWindow):
     def _download(self, path, filename):
         self._last_file_downloaded = path
         worker = DownloadThread(self._ftp, path, filename)
+        worker.sig_step.connect(self._on_part_dowloaded)
         worker.sig_done.connect(self._file_downloaded)
         worker.work()
+
+    @QtCore.pyqtSlot(int)
+    def _on_part_dowloaded(self, val):
+        self.progressBar.setValue(val)
 
     @QtCore.pyqtSlot()
     def _file_downloaded(self):

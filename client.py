@@ -1,9 +1,17 @@
 # !/usr/bin/env python3
 
-from ftp import FTP, FTP_PORT
-import sys
-import os
 import argparse
+import os
+import sys
+from sys import platform
+
+from ftp import FTP, FTP_PORT
+
+if platform.startswith("linux"):
+    import click_package as click
+elif platform == "win32":
+    import click
+
 
 
 def main():
@@ -22,8 +30,21 @@ def main():
     args = parser.parse_args()
 
     con = FTP(args.address, args.port, args.active)
-    con.connect()
-    con.run_batch()
+    print(con.connect())
+    con.run_batch(download_func=download_batch)
+
+
+def download_batch(size, new_path, ftp):
+    """
+    Download with console progress bar
+    :return:
+    """
+    with click.progressbar(length=int(size),
+                           label="Downloading file ") as bar:
+        with open(new_path, 'wb') as file:
+            for part in ftp.get_binary_data():
+                file.write(part)
+                bar.update(len(part))
 
 
 if __name__ == '__main__':
