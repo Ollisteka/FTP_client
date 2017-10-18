@@ -142,18 +142,32 @@ class FTPWindow(QtWidgets.QMainWindow):
         directory = self._ftp.list().split('\n')
         _layout = QtWidgets.QGridLayout()
         _layout.setSpacing(5)
+        # row = 0
+        # for item in directory:
+        #     button = QtWidgets.QPushButton()
+        #     button.setText(item)
+        #     button.released.connect(lambda x=item: self._move(
+        #         x.split(' ')[-1].strip('\r')))
+        #     _layout.addWidget(button, row, 0)
+        #     row += 1
         i = 0
-        for item in directory:
-            button = QtWidgets.QPushButton()
-            button.setText(item)
-            button.released.connect(lambda x=item: self._move(
-                x.split(' ')[-1].strip('\r')))
-            _layout.addWidget(button, i, 0)
-            i += 1
+        for row in range(len(directory) // 2 + 1):
+            for column in range(len(directory) // 2 + 1):
+                try:
+                    item = directory[i]
+                except IndexError:
+                    break
+                button = QtWidgets.QPushButton()
+                button.setText(item)
+                button.released.connect(lambda x=item: self._move(
+                    x.split(' ')[-1].strip('\r')))
+                _layout.addWidget(button, column, row)
+                i += 1
 
         _window = QtWidgets.QWidget()
         _window.setLayout(_layout)
 
+        a = _window.size()
         self.setCentralWidget(_window)
 
     def _move(self, path):
