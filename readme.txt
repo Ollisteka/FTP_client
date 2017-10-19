@@ -10,6 +10,9 @@ GUI:
 Запуск:
     Windows: python gui_pyqt.py
     Linux: python3 gui_pyqt.py
+
+Жёлтая кнопка - папка
+Оранжева кнопка - файл
 ---
 Консольная версия
 

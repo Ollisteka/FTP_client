@@ -139,7 +139,7 @@ class FTPWindow(QtWidgets.QMainWindow):
     def _print_list(self):
         if self.thread and self.thread.is_alive():
             return
-        directory = self._ftp.list().split('\n')
+        directory = self._ftp.list().split('\r\n')
         _layout = QtWidgets.QGridLayout()
         _layout.setSpacing(5)
         # row = 0
@@ -157,10 +157,14 @@ class FTPWindow(QtWidgets.QMainWindow):
                     item = directory[i]
                 except IndexError:
                     break
+
                 button = QtWidgets.QPushButton()
-                button.setText(item)
-                button.released.connect(lambda x=item: self._move(
-                    x.split(' ')[-1].strip('\r')))
+                text_to_add = "BACK" if item == "" else item.split(' ')[-1]
+                button.setText(text_to_add)
+                isFile = self.checkIfFile(text_to_add)
+                button.setStyleSheet('background-color: orange' if isFile else
+                                     'background-color: yellow')
+                button.released.connect(lambda x=text_to_add: self._move(x))
                 _layout.addWidget(button, column, row)
                 i += 1
 
@@ -170,11 +174,19 @@ class FTPWindow(QtWidgets.QMainWindow):
         a = _window.size()
         self.setCentralWidget(_window)
 
+    def checkIfFile(self, path):
+        try:
+            self._ftp.cwd(path)
+            self._ftp.cwd("..")
+            return False
+        except PermanentError:
+            return True
+
     def _move(self, path):
         if self.thread and self.thread.is_alive():
             return
         try:
-            self._ftp.cwd(path if len(path) > 1 else '..')
+            self._ftp.cwd(path if path != "BACK" else '..')
         except PermanentError as err:
             options = QtWidgets.QFileDialog.Options()
             options |= QtWidgets.QFileDialog.DontUseNativeDialog
