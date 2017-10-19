@@ -151,8 +151,8 @@ class FTPWindow(QtWidgets.QMainWindow):
         #     _layout.addWidget(button, row, 0)
         #     row += 1
         i = 0
-        for row in range(len(directory) // 2 + 1):
-            for column in range(len(directory) // 2 + 1):
+        for row in range((len(directory) + 1) // 2):
+            for column in range((len(directory) + 1) // 2):
                 try:
                     item = directory[i]
                 except IndexError:
@@ -171,7 +171,6 @@ class FTPWindow(QtWidgets.QMainWindow):
         _window = QtWidgets.QWidget()
         _window.setLayout(_layout)
 
-        a = _window.size()
         self.setCentralWidget(_window)
 
     def checkIfFile(self, path):
