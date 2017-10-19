@@ -161,7 +161,7 @@ class FTP:
             output_func(rep)
         if not self.passive:
             self.data_socket = self.data_socket.accept()[0]
-        data = ''.join([part.decode(ENCODING)
+        data = ''.join([part.decode(ENCODING, errors='ignore')
                         for part in self.get_binary_data()])
         self.data_socket.close()
         rep = self.get_reply()
