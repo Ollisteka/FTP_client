@@ -121,6 +121,8 @@ class FTPWindow(QtWidgets.QMainWindow):
 
         self._ftp = FTP()
 
+        self._buttons = []
+
     def closeEvent(self, event):
         if self.thread and self.thread.is_alive():
             text = "File is being downloaded. Please, wait for it to complete"
@@ -139,7 +141,10 @@ class FTPWindow(QtWidgets.QMainWindow):
     def _print_list(self):
         if self.thread and self.thread.is_alive():
             return
-        directory = self._ftp.list().split('\r\n')
+        files = self._ftp.nlst().split('\r\n')
+        if "" in files:
+            files.remove("")
+
         _layout = QtWidgets.QGridLayout()
         _layout.setSpacing(5)
         # row = 0
@@ -151,22 +156,35 @@ class FTPWindow(QtWidgets.QMainWindow):
         #     _layout.addWidget(button, row, 0)
         #     row += 1
         i = 0
-        for row in range((len(directory) + 1) // 2):
-            for column in range((len(directory) + 1) // 2):
+        self._buttons = []
+        width = 1
+        row = 0
+        for row in range((len(files) + 1) // 2):
+            for column in range((len(files) + 1) // 2):
                 try:
-                    item = directory[i]
+                    item = files[i]
                 except IndexError:
                     break
 
                 button = QtWidgets.QPushButton()
-                text_to_add = "BACK" if item == "" else item.split(' ')[-1]
-                button.setText(text_to_add)
-                isFile = self.checkIfFile(text_to_add)
+                button.setText(item)
+                isFile = self.checkIfFile(item)
                 button.setStyleSheet('background-color: orange' if isFile else
                                      'background-color: yellow')
-                button.released.connect(lambda x=text_to_add: self._move(x))
+                button.released.connect(lambda x=item: self._move(x))
                 _layout.addWidget(button, column, row)
+                self._buttons.append(button)
+                if column > width:
+                    width = column
+
                 i += 1
+
+        button = QtWidgets.QPushButton()
+        button.setText("BACK")
+        button.setStyleSheet('background-color: white')
+        button.released.connect(lambda x="..": self._move(x))
+        _layout.addWidget(button, row + 1, 0, 1, 1)
+        self._buttons.append(button)
 
         _window = QtWidgets.QWidget()
         _window.setLayout(_layout)
@@ -185,7 +203,7 @@ class FTPWindow(QtWidgets.QMainWindow):
         if self.thread and self.thread.is_alive():
             return
         try:
-            self._ftp.cwd(path if path != "BACK" else '..')
+            self._ftp.cwd(path)
         except PermanentError as err:
             options = QtWidgets.QFileDialog.Options()
             options |= QtWidgets.QFileDialog.DontUseNativeDialog
@@ -201,6 +219,8 @@ class FTPWindow(QtWidgets.QMainWindow):
         self._print_list()
 
     def _download(self, path, filename):
+        for btn in self._buttons:
+            btn.setDisabled(True)
         worker = DownloadThread(self._ftp, path, filename)
         worker.sig_step.connect(self._on_part_downloaded)
         worker.sig_done.connect(self._file_downloaded)
@@ -212,6 +232,8 @@ class FTPWindow(QtWidgets.QMainWindow):
 
     @QtCore.pyqtSlot(str)
     def _file_downloaded(self, value):
+        for btn in self._buttons:
+            btn.setDisabled(False)
         show_message(value, "Success")
 
     def get_params(self):

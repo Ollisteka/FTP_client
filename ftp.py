@@ -21,7 +21,7 @@ MAXLENGTH = 8192
 CRLF = '\r\n'
 B_CRLF = b'\r\n'
 
-ENCODING = "utf8"
+ENCODING = "cp1251"
 
 
 class FTP:
@@ -147,7 +147,23 @@ class FTP:
         rep = self.get_reply()
         return rep
 
+    def nlst(self, output_func=None):
+        """
+        List of items in shorter form
+        :param output_func:
+        :return:
+        """
+        return self._retr_lines("NLST", output_func)
+
     def list(self, output_func=None):
+        """
+        List directories in lon format
+        :param output_func:
+        :return:
+        """
+        return self._retr_lines("LIST", output_func)
+
+    def _retr_lines(self, command, output_func=None):
         """
         List of items in a current folder
         :return:
@@ -156,12 +172,12 @@ class FTP:
             self.pasv()
         else:
             self.port()
-        rep = self.send("LIST" + CRLF)
+        rep = self.send(command + CRLF)
         if output_func:
             output_func(rep)
         if not self.passive:
             self.data_socket = self.data_socket.accept()[0]
-        data = ''.join([part.decode(ENCODING, errors='ignore')
+        data = ''.join([part.decode(ENCODING, errors='strict')
                         for part in self.get_binary_data()])
         self.data_socket.close()
         rep = self.get_reply()
@@ -313,7 +329,7 @@ class FTP:
                          "HELP": self.help,
                          # "MDTM" : self.mdtm,
                          # "MKD" : self.mkd,
-                         # "NLST" : self.nlst,
+                         "NLST": self.nlst,
                          # "NOOP" : self.noop,
                          "PASS": self.password,
                          "PASV": self.pasv,
