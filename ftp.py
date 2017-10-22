@@ -112,6 +112,10 @@ class FTP:
         split = os.path.split(file_path)
         return split[len(split) - 1]
 
+    def extract_path_from_pwd_reply(self):
+        path = re.findall(r'.*\"/?\\?(.*)\".*', self.pwd())
+        return path[0]
+
     def stor(self, local_path, server_path=None, load_func=None,
              output_func=None, **kwargs):
         """
@@ -128,8 +132,7 @@ class FTP:
         else:
             self.port()
         if not server_path:
-            path = re.findall(r'.*\"/?\\?(.*)\".*', self.pwd())
-            server_path = path[0]
+            server_path = self.extract_path_from_pwd_reply()
 
         if isinstance(server_path, tempfile._TemporaryFileWrapper):
             pass
