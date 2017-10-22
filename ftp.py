@@ -112,15 +112,51 @@ class FTP:
         split = os.path.split(file_path)
         return split[len(split) - 1]
 
-    def retr(self, file_path, new_path=None, output_func=None,
-             download_func=None):
+    def stor(self, local_path, server_path=None, load_func=None,
+             output_func=None, **kwargs):
+        """
+        Load file to server
+        :param local_path:
+        :param server_path:
+        :param output_func:
+        :return:
+        """
+        if not load_func:
+            raise Exception("Specify how to load file")
+        if self.passive:
+            self.pasv()
+        else:
+            self.port()
+        if not server_path:
+            path = re.findall(r'.*\"/?\\?(.*)\".*', self.pwd())
+            server_path = path[0]
+
+        if isinstance(server_path, tempfile._TemporaryFileWrapper):
+            pass
+        elif os.path.isdir(server_path):
+            server_path = os.path.join(server_path,
+                                       self.__get_filename(local_path))
+
+        size = os.path.getsize(local_path)
+        rep = self.send("STOR " + server_path + CRLF)
+        if output_func:
+            output_func(rep)
+        if not self.passive:
+            self.data_socket = self.data_socket.accept()[0]
+        load_func(size, local_path, self)
+        self.data_socket.close()
+        rep = self.get_reply()
+        return rep
+
+    def retr(self, server_path, local_path=None, output_func=None,
+             download_func=None, **kwargs):
         """
         Download file from server file path to a new one
         (or current working directory)
         :param download_func: how the file will be downloaded
         :param output_func: where some output will go
-        :param file_path:
-        :param new_path:
+        :param server_path:
+        :param local_path:
         :return:
         """
         if not download_func:
@@ -129,20 +165,21 @@ class FTP:
             self.pasv()
         else:
             self.port()
-        if not new_path:
-            new_path = self.__get_filename(file_path)
+        if not local_path:
+            local_path = self.__get_filename(server_path)
 
-        if isinstance(new_path ,tempfile._TemporaryFileWrapper):
+        if isinstance(local_path, tempfile._TemporaryFileWrapper):
             pass
-        elif os.path.isdir(new_path):
-            new_path = os.path.join(new_path, self.__get_filename(file_path))
-        size = self.size(file_path, silent=True)
-        rep = self.send("RETR " + file_path + CRLF)
+        elif os.path.isdir(local_path):
+            local_path = os.path.join(local_path,
+                                      self.__get_filename(server_path))
+        size = self.size(server_path, silent=True)
+        rep = self.send("RETR " + server_path + CRLF)
         if output_func:
             output_func(rep)
         if not self.passive:
             self.data_socket = self.data_socket.accept()[0]
-        download_func(size, new_path, self)
+        download_func(size, local_path, self)
         self.data_socket.close()
         rep = self.get_reply()
         return rep
@@ -245,6 +282,26 @@ class FTP:
         rep = self.send("PWD" + CRLF)
         return rep
 
+    def feat(self, **kwargs):
+        """
+        Get the feature list implemented by the server.
+        :param kwargs:
+        :return:
+        """
+        rep = self.send("FEAT" + CRLF)
+        return rep
+
+    def opts(self, feature, cmd, **kwargs):
+        """
+        Select options for a feature
+        :param cmd:
+        :param feature:
+        :param kwargs:
+        :return:
+        """
+        rep = self.send(" ".join(["OPTS", feature, cmd]) + CRLF)
+        return rep
+
     def help(self, **kwargs):
         """
         Get a help message
@@ -341,8 +398,10 @@ class FTP:
                          # "RNFR" : self.rnfr,
                          # "RNTO" : self.rnto,
                          "SIZE": self.size,
-                         # "STOR" : self.stor,
+                         "STOR": self.stor,
                          # "SYST" : self.syst,
+                         "FEAT": self.feat,
+                         "OPTS": self.opts,
                          "TYPE": self.type,
                          "USER": self.user,
                          }
@@ -361,7 +420,7 @@ class FTP:
         self.welcome = self.get_reply()
         return self.welcome
 
-    def run_batch(self, download_func):
+    def run_batch(self, download_func, load_func):
         """
         Runs an ftp client in console mode
         :return:
@@ -376,12 +435,14 @@ class FTP:
                     if len(arguments) == 1:
                         print(self.commands[command](arguments[0],
                                                      output_func=print,
-                                                     download_func=download_func))
+                                                     download_func=download_func,
+                                                     load_func=load_func))
                     if len(arguments) == 2:
                         print(self.commands[command](arguments[0],
                                                      arguments[1],
                                                      output_func=print,
-                                                     download_func=download_func))
+                                                     download_func=download_func,
+                                                     load_func=load_func))
                 else:
                     print(self.commands[command]())
             else:

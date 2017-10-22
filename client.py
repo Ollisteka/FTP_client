@@ -31,7 +31,7 @@ def main():
 
     con = FTP(args.address, args.port, args.active)
     print(con.connect())
-    con.run_batch(download_func=download_batch)
+    con.run_batch(download_func=download_batch, load_func=load_batch)
 
 
 def download_batch(size, new_path, ftp):
@@ -44,6 +44,19 @@ def download_batch(size, new_path, ftp):
         with open(new_path, 'wb') as file:
             for part in ftp.get_binary_data():
                 file.write(part)
+                bar.update(len(part))
+
+
+def load_batch(size, local_path, ftp):
+    """
+    Download file to server with console progress bar
+    :return:
+    """
+    with click.progressbar(length=int(size),
+                           label="Downloading file ") as bar:
+        with open(local_path, 'rb') as file:
+            for part in file:
+                ftp.data_socket.sendall(part)
                 bar.update(len(part))
 
 
