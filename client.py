@@ -5,6 +5,7 @@ import os
 import sys
 from sys import platform
 
+import ftp
 from ftp import FTP, FTP_PORT
 
 if platform.startswith("linux"):
@@ -24,11 +25,14 @@ def main():
     parser.add_argument('address', help='address to connect')
     parser.add_argument('port', help='port', nargs='?',
                         type=int, default=FTP_PORT)
+    parser.add_argument('-e', '--encoding', type=str, help="Choose server's "
+                                                           "encoding")
     parser.add_argument('--active', dest='active',
                         action='store_true', help='use active mode')
 
     args = parser.parse_args()
-
+    if args.encoding:
+        ftp.ENCODING = args.encoding
     con = FTP(args.address, args.port, args.active)
     print(con.connect())
     con.run_batch(download_func=download_batch, load_func=load_batch)
