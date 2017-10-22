@@ -76,6 +76,14 @@ class FTP:
             output_func(reply)
         return reply
 
+    def cwd_up(self, **kwargs):
+        """
+        Change to parent directory
+        :return:
+        """
+        rep = self.send("CDUP" + CRLF)
+        return rep
+
     def cwd(self, directory, **kwargs):
         """
         Change directory
@@ -294,6 +302,64 @@ class FTP:
         rep = self.send("FEAT" + CRLF)
         return rep
 
+    def mkd(self, directory, **kwargs):
+        """
+        Make new directory
+        :param directory:
+        :param kwargs:
+        :return:
+        """
+        rep = self.send("MKD " + directory + CRLF)
+        return rep
+
+    def rmd(self, directory, **kwargs):
+        """
+        Remove directory
+        :param directory:
+        :param kwargs:
+        :return:
+        """
+        rep = self.send("RMD " + directory + CRLF)
+        return rep
+
+    def delete(self, file, **kwargs):
+        """
+        Delete file
+        :param file:
+        :param kwargs:
+        :return:
+        """
+        rep = self.send("DELE " + file + CRLF)
+        return rep
+
+    def rename_from(self, old_name, **kwargs):
+        """
+        Rename file or folder. Must be called immediately before RNTO command
+        :param old_name:
+        :param kwargs:
+        :return:
+        """
+        rep = self.send("RNFR " + old_name + CRLF)
+        return rep
+
+    def rename_to(self, new_name, **kwargs):
+        """
+        Rename file or folder. Must be called immediately after RNFR command
+        :param new_name:
+        :param kwargs:
+        :return:
+        """
+        rep = self.send("RNTO " + new_name + CRLF)
+        return rep
+
+    def noop(self, **kwargs):
+        """
+        Send empty command, to keep connection alive
+        :return:
+        """
+        rep = self.send("NOOP" + CRLF)
+        return rep
+
     def opts(self, feature, cmd, **kwargs):
         """
         Select options for a feature
@@ -303,6 +369,14 @@ class FTP:
         :return:
         """
         rep = self.send(" ".join(["OPTS", feature, cmd]) + CRLF)
+        return rep
+
+    def syst(self, **kwargs):
+        """
+        Return system type.
+        :return:
+        """
+        rep = self.send("SYST" + CRLF)
         return rep
 
     def help(self, **kwargs):
@@ -381,28 +455,24 @@ class FTP:
         self.passive = passive
         self.commands = {"QUIT": self.quit,
                          "LIST": self.list,
-                         # "ABOR" : self.abor,
-                         # "CDUP" : self.cdup,
+                         "CDUP": self.cwd_up,
                          "CWD": self.cwd,
-                         # "DELE" : self.dele,
-                         # "EPSV" : self.epsv,
+                         "DELE": self.delete,
                          "HELP": self.help,
-                         # "MDTM" : self.mdtm,
-                         # "MKD" : self.mkd,
+                         "MKD": self.mkd,
                          "NLST": self.nlst,
-                         # "NOOP" : self.noop,
+                         "NOOP": self.noop,
                          "PASS": self.password,
                          "PASV": self.pasv,
                          "PWD": self.pwd,
-                         # "REIN" : self.rein,
                          "RETR": self.retr,
                          "PORT": self.port,
-                         # "RMD" : self.rmd,
-                         # "RNFR" : self.rnfr,
-                         # "RNTO" : self.rnto,
+                         "RMD": self.rmd,
+                         "RNFR": self.rename_from,
+                         "RNTO": self.rename_to,
                          "SIZE": self.size,
                          "STOR": self.stor,
-                         # "SYST" : self.syst,
+                         "SYST": self.syst,
                          "FEAT": self.feat,
                          "OPTS": self.opts,
                          "TYPE": self.type,
