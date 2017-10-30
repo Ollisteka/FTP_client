@@ -1,8 +1,11 @@
 # !/usr/bin/env python3
 import sys
 import threading
+from math import sqrt
 
 from PyQt5 import QtWidgets, QtCore
+from PyQt5.QtWidgets import QFileDialog, QPushButton, QLineEdit, \
+    QGridLayout, QLabel, QVBoxLayout, QDialogButtonBox
 
 from errors import PermanentError
 from ftp import FTP
@@ -12,21 +15,21 @@ class LoginWindow(QtWidgets.QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self._login = QtWidgets.QLineEdit("anonymous")
-        self._password = QtWidgets.QLineEdit("password")
-        self._password.setEchoMode(QtWidgets.QLineEdit.Password)
-        self._buttons = QtWidgets.QDialogButtonBox(
-            QtWidgets.QDialogButtonBox.Cancel | QtWidgets.QDialogButtonBox.Ok
+        self.login = QLineEdit("anonymous")
+        self.password = QLineEdit("password")
+        self.password.setEchoMode(QLineEdit.Password)
+        self._buttons = QDialogButtonBox(
+            QDialogButtonBox.Cancel | QDialogButtonBox.Ok
         )
 
-        layout2 = QtWidgets.QGridLayout()
+        layout2 = QGridLayout()
         layout2.setSpacing(5)
-        layout2.addWidget(QtWidgets.QLabel("Login: "), 0, 0)
-        layout2.addWidget(self._login, 0, 1)
-        layout2.addWidget(QtWidgets.QLabel("Password: "), 1, 0)
-        layout2.addWidget(self._password, 1, 1)
+        layout2.addWidget(QLabel("Login: "), 0, 0)
+        layout2.addWidget(self.login, 0, 1)
+        layout2.addWidget(QLabel("Password: "), 1, 0)
+        layout2.addWidget(self.password, 1, 1)
 
-        layout = QtWidgets.QVBoxLayout()
+        layout = QVBoxLayout()
         layout.setSpacing(5)
         layout.addLayout(layout2)
         layout.addWidget(self._buttons)
@@ -41,20 +44,21 @@ class ConnectionWindow(QtWidgets.QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self._ip = QtWidgets.QLineEdit("212.193.68.227")
-        self._port = QtWidgets.QLineEdit("21")
-        self._buttons = QtWidgets.QDialogButtonBox(
-            QtWidgets.QDialogButtonBox.Cancel | QtWidgets.QDialogButtonBox.Ok
+        self.ip = QLineEdit("212.193.68.227")
+        # self.ip = QLineEdit("localhost")
+        self.port = QLineEdit("21")
+        self._buttons = QDialogButtonBox(
+            QDialogButtonBox.Cancel | QDialogButtonBox.Ok
         )
 
-        layout2 = QtWidgets.QGridLayout()
+        layout2 = QGridLayout()
         layout2.setSpacing(5)
-        layout2.addWidget(QtWidgets.QLabel("Server IP: "), 0, 0)
-        layout2.addWidget(self._ip, 0, 1)
-        layout2.addWidget(QtWidgets.QLabel("Port: "), 1, 0)
-        layout2.addWidget(self._port, 1, 1)
+        layout2.addWidget(QLabel("Server IP: "), 0, 0)
+        layout2.addWidget(self.ip, 0, 1)
+        layout2.addWidget(QLabel("Port: "), 1, 0)
+        layout2.addWidget(self.port, 1, 1)
 
-        layout = QtWidgets.QVBoxLayout()
+        layout = QVBoxLayout()
         layout.setSpacing(5)
         layout.addLayout(layout2)
         layout.addWidget(self._buttons)
@@ -66,27 +70,166 @@ class ConnectionWindow(QtWidgets.QDialog):
 
 
 class DownloadThread(QtCore.QObject):
-    sig_done = QtCore.pyqtSignal(str)
+    sig_done = QtCore.pyqtSignal(str, bool)
     sig_step = QtCore.pyqtSignal(int)
 
-    def __init__(self, ftp, path, filename):
+    def __init__(self, ftp, path, filename, download_from):
         super().__init__()
         self._abort = False
         self._ftp = ftp
         self._path = path
         self._filename = filename
+        self._download_from = download_from
 
     def work(self):
-        self._ftp.retr(self._path, self._filename, download_func=self.download)
+        if self._download_from:
+            self._ftp.retr(self._path, self._filename,
+                           download_func=self.download_from_server)
+        else:
+            try:
+                self._ftp.add_file(self._filename,
+                                   load_func=self.download_to_server)
+            except PermanentError as err:
+                self.sig_done.emit(err.args[0], False)
 
-    def download(self, size, new_path, ftp):
+    def download_from_server(self, size, new_path, ftp):
         downloaded = 0
         with open(new_path, 'wb') as file:
             for part in ftp.get_binary_data():
                 downloaded += len(part)
                 self.sig_step.emit(100 * downloaded / int(size))
                 file.write(part)
-        self.sig_done.emit("Download of " + self._path + " is complete")
+        self.sig_done.emit("Download of " + self._path + " is complete", True)
+
+    def download_to_server(self, size, filename, ftp):
+        downloaded = 0
+        with open(filename, 'rb') as file:
+            for part in file:
+                downloaded += len(part)
+                self.sig_step.emit(100 * downloaded / int(size))
+                ftp.data_socket.sendall(part)
+        self.sig_done.emit("Download of " + self._filename + " is complete",
+                           True)
+
+
+class NewFolderWindow(QtWidgets.QDialog):
+    def __init__(self, ftp, parent=None):
+        super().__init__(parent)
+
+        self.ftp = ftp
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.Cancel | QDialogButtonBox.Ok
+        )
+
+        self.new_folder = QLineEdit("foldername")
+
+        layout2 = QGridLayout()
+        layout2.setSpacing(5)
+        layout2.addWidget(QLabel("Folder name: "), 0, 0)
+        layout2.addWidget(self.new_folder, 0, 1)
+
+        layout = QVBoxLayout()
+        layout.setSpacing(5)
+        layout.addLayout(layout2)
+        layout.addWidget(buttons)
+
+        buttons.accepted.connect(self.make_new_directory)
+        buttons.rejected.connect(self.close)
+
+        self.setLayout(layout)
+
+    def make_new_directory(self):
+        try:
+            self.ftp.make_directory(self.new_folder.text())
+            self.parent().print_list()
+            self.close()
+        except PermanentError as err:
+            show_message(err.args[0],
+                         "Error")
+
+
+class DetailedInfoWindow(QtWidgets.QDialog):
+    def __init__(self, ftp, filename, is_file, parent=None):
+        super().__init__(parent)
+        self._buttons = QDialogButtonBox(
+
+        )
+        self.ftp = ftp
+        self.old_filename = filename
+
+        self.new_filename = QLineEdit(filename)
+
+        layout2 = self.init_file_info() if is_file else self.init_folder_info()
+
+        layout = QtWidgets.QVBoxLayout()
+        layout.setSpacing(5)
+        layout.addLayout(layout2)
+
+        for button in [make_button("Rename", self.rename),
+                       make_button("Delete",
+                                   lambda x=self.ftp.delete_file if is_file
+                                   else self.ftp.delete_directory:
+                                   self.delete(x),
+                                   ),
+                       make_button("Cancel", self.close)]:
+            layout.addWidget(button)
+        self.setLayout(layout)
+
+    def init_file_info(self):
+        layout = QGridLayout()
+        layout.setSpacing(5)
+        layout.addWidget(QLabel("Last modified: "), 0, 0)
+        layout.addWidget(QLabel(self.extract_date(self.ftp.mdtm(
+            self.old_filename))), 0, 1)
+        layout.addWidget(QLabel("Size: "), 1, 0)
+        size = self.ftp.size(self.old_filename).strip('\n')
+        layout.addWidget(QLabel(size + ' bytes'), 1, 1)
+        layout.addWidget(QLabel("Rename to: "), 2, 0)
+        layout.addWidget(self.new_filename, 2, 1)
+
+        return layout
+
+    def init_folder_info(self):
+        layout = QGridLayout()
+        layout.setSpacing(5)
+
+        layout.addWidget(QLabel("Rename to: "), 0, 0)
+        layout.addWidget(self.new_filename, 0, 1)
+
+        return layout
+
+    @staticmethod
+    def extract_date(answer):
+        date = answer.split(' ')[1]
+        year = date[:4]
+        month = date[4:6]
+        day = date[6:8]
+        hour = date[8:10]
+        minute = date[10:12]
+        second = date[12:14]
+        return '.'.join([day, month, year]) \
+               + ' ' + \
+               ':'.join([hour, minute, second])
+
+    def rename(self):
+        try:
+            self.ftp.rename_from(self.old_filename)
+            self.ftp.rename_to(self.new_filename.text())
+            self.parent().print_list()
+            self.close()
+        except PermanentError as err:
+            show_message(err.args[0],
+                         "Error")
+
+    def delete(self, delete_func):
+        try:
+            delete_func(self.old_filename)
+            self.parent().print_list()
+            self.close()
+        except PermanentError as err:
+            show_message(err.args[0],
+                         "Error")
 
 
 class FTPWindow(QtWidgets.QMainWindow):
@@ -95,7 +238,7 @@ class FTPWindow(QtWidgets.QMainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        _layout = QtWidgets.QGridLayout()
+        _layout = QGridLayout()
         _layout.setSpacing(5)
         _window = QtWidgets.QWidget()
         _window.setLayout(_layout)
@@ -105,15 +248,15 @@ class FTPWindow(QtWidgets.QMainWindow):
         self.resize(400, 300)
         self.setWindowTitle("FTP client")
 
-        self._con_dialog = ConnectionWindow(parent=self)
-        self._con_dialog.setModal(True)
-        self._con_dialog.accepted.connect(self._connect)
-        self._con_dialog.rejected.connect(self.close)
+        self.connection_dialog = ConnectionWindow(parent=self)
+        self.connection_dialog.setModal(True)
+        self.connection_dialog.accepted.connect(self._connect)
+        self.connection_dialog.rejected.connect(self.close)
 
-        self._login_dialog = LoginWindow(parent=self)
-        self._login_dialog.setModal(True)
-        self._login_dialog.accepted.connect(self._login)
-        self._login_dialog.rejected.connect(self.close)
+        self.login_dialog = LoginWindow(parent=self)
+        self.login_dialog.setModal(True)
+        self.login_dialog.accepted.connect(self._login)
+        self.login_dialog.rejected.connect(self.close)
 
         self.progressBar = QtWidgets.QProgressBar()
         self.statusBar().addPermanentWidget(self.progressBar)
@@ -138,60 +281,85 @@ class FTPWindow(QtWidgets.QMainWindow):
         if result == QtWidgets.QMessageBox.Yes:
             event.accept()
 
-    def _print_list(self):
+    def print_list(self):
         if self.thread and self.thread.is_alive():
             return
-        files = self._ftp.nlst().split('\r\n')
-        if "" in files:
-            files.remove("")
 
-        _layout = QtWidgets.QGridLayout()
-        _layout.setSpacing(5)
-        # row = 0
-        # for item in directory:
-        #     button = QtWidgets.QPushButton()
-        #     button.setText(item)
-        #     button.released.connect(lambda x=item: self._move(
-        #         x.split(' ')[-1].strip('\r')))
-        #     _layout.addWidget(button, row, 0)
-        #     row += 1
-        i = 0
+        files = self._ftp.nlst().split('\r\n')
+
+        for item in ["", ".", ".."]:
+            if item in files:
+                files.remove(item)
+
+        layout = QGridLayout()
+        layout.setSpacing(5)
+
         self._buttons = []
-        width = 1
-        row = 0
-        for row in range((len(files) + 1) // 2):
-            for column in range((len(files) + 1) // 2):
+
+        self.add_service_button(layout, "BACK",
+                                lambda x="..": self._move(x), 0)
+        self.add_service_button(layout, "Add Directory",
+                                self.make_new_dir, 1)
+        self.add_service_button(layout, "Add File",
+                                self.add_file, 2)
+
+        self.place_file_buttons(files, layout)
+
+        _window = QtWidgets.QWidget()
+        _window.setLayout(layout)
+
+        self.setCentralWidget(_window)
+
+    def add_service_button(self, layout, text, func, column):
+        button = make_button(text, func)
+        button.setStyleSheet('background-color: white')
+        layout.addWidget(button, 0, column, 1, 1)
+        self._buttons.append(button)
+
+    def place_file_buttons(self, files, layout):
+        i = 0
+        upper_bound = int(sqrt(len(files)))
+        for column in range(0, upper_bound + 1):
+            for row in range(1, upper_bound + 2):
                 try:
                     item = files[i]
                 except IndexError:
                     break
 
-                button = QtWidgets.QPushButton()
-                button.setText(item)
-                isFile = self.checkIfFile(item)
-                button.setStyleSheet('background-color: orange' if isFile else
-                                     'background-color: yellow')
-                button.released.connect(lambda x=item: self._move(x))
-                _layout.addWidget(button, column, row)
-                self._buttons.append(button)
-                if column > width:
-                    width = column
+                button = make_button(item, lambda x=item: self._move(x))
 
+                is_file = self.check_if_file(item)
+
+                button.setStyleSheet('background-color: orange' if is_file
+                                     else 'background-color: yellow')
+
+                button.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+                button.customContextMenuRequested.connect(
+                    lambda x=None, y=item, z=is_file:
+                    self.handle_right_click(x, y, z))
+
+                layout.addWidget(button, row, column)
+                self._buttons.append(button)
                 i += 1
 
-        button = QtWidgets.QPushButton()
-        button.setText("BACK")
-        button.setStyleSheet('background-color: white')
-        button.released.connect(lambda x="..": self._move(x))
-        _layout.addWidget(button, row + 1, 0, 1, 1)
-        self._buttons.append(button)
+    def handle_right_click(self, MouseEvent, filename, is_file):
+        info = DetailedInfoWindow(self._ftp, filename, is_file, parent=self)
+        info.setModal(True)
+        info.show()
 
-        _window = QtWidgets.QWidget()
-        _window.setLayout(_layout)
+    def make_new_dir(self):
+        info = NewFolderWindow(self._ftp, parent=self)
+        info.setModal(True)
+        info.show()
 
-        self.setCentralWidget(_window)
+    def add_file(self):
+        filename = QFileDialog.getOpenFileName()[0]
+        if filename:
+            self.thread = threading.Thread(target=self._download,
+                                           args=(None, filename, False))
+            self.thread.start()
 
-    def checkIfFile(self, path):
+    def check_if_file(self, path):
         try:
             self._ftp.cwd(path)
             self._ftp.cwd("..")
@@ -205,23 +373,22 @@ class FTPWindow(QtWidgets.QMainWindow):
         try:
             self._ftp.cwd(path)
         except PermanentError as err:
-            options = QtWidgets.QFileDialog.Options()
-            options |= QtWidgets.QFileDialog.DontUseNativeDialog
-            filename, _ = QtWidgets.QFileDialog.getSaveFileName(
+            options = QFileDialog.Options()
+            options |= QFileDialog.DontUseNativeDialog
+            filename, _ = QFileDialog.getSaveFileName(
                 self, "Save file as", path,
-                "All Files (*);;Text Files (*.txt)",
-                options=options)
+                "All Files (*);;Text Files (*.txt)", options=options)
             if filename:
                 self.thread = threading.Thread(target=self._download,
-                                               args=(path, filename))
+                                               args=(path, filename, True))
                 self.thread.start()
 
-        self._print_list()
+        self.print_list()
 
-    def _download(self, path, filename):
+    def _download(self, path, filename, download_from):
         for btn in self._buttons:
             btn.setDisabled(True)
-        worker = DownloadThread(self._ftp, path, filename)
+        worker = DownloadThread(self._ftp, path, filename, download_from)
         worker.sig_step.connect(self._on_part_downloaded)
         worker.sig_done.connect(self._file_downloaded)
         worker.work()
@@ -230,39 +397,39 @@ class FTPWindow(QtWidgets.QMainWindow):
     def _on_part_downloaded(self, value):
         self.progressBar.setValue(value)
 
-    @QtCore.pyqtSlot(str)
-    def _file_downloaded(self, value):
+    @QtCore.pyqtSlot(str, bool)
+    def _file_downloaded(self, value, success):
         for btn in self._buttons:
             btn.setDisabled(False)
-        show_message(value, "Success")
+        show_message(value, "Success" if success else "Error")
+        self.print_list()
 
     def get_params(self):
-        self._con_dialog.show()
+        self.connection_dialog.show()
 
     def login(self):
-        self._login_dialog.show()
+        self.login_dialog.show()
 
     def _login(self):
         try:
-            self._username = self._login_dialog._login.text()
-            self._password = self._login_dialog._password.text()
-        except Exception as e:
-            self.statusBar().showMessage("Connection error: {}".format(e))
-
-        self._ftp.login(self._username, self._password)
-        self._print_list()
+            self._username = self.login_dialog.login.text()
+            self._password = self.login_dialog.password.text()
+            self._ftp.login(self._username, self._password)
+            self.print_list()
+        except PermanentError as err:
+            show_message(err.args[0], "Error")
+            self.login()
 
     def _connect(self):
         try:
-            self._ip = self._con_dialog._ip.text()
-            self._port = int(self._con_dialog._port.text())
+            self._ip = self.connection_dialog.ip.text()
+            self._port = int(self.connection_dialog.port.text())
+            self.statusBar().showMessage(
+                self._ftp.connect(self._ip, self._port))
+            self.login()
         except Exception as e:
-            self.statusBar().showMessage("Connection error: {}".format(e))
-
-        self.statusBar().showMessage(
-            "Connected to: {}, {}".format(self._ip, self._port))
-        self.statusBar().showMessage(self._ftp.connect(self._ip, self._port))
-        self.login()
+            show_message(str(e), "Error")
+            self.close()
 
 
 def show_message(text, title):
@@ -270,6 +437,13 @@ def show_message(text, title):
     msg.setInformativeText(text)
     msg.setWindowTitle(title)
     msg.exec_()
+
+
+def make_button(text, func):
+    button = QPushButton()
+    button.setText(text)
+    button.released.connect(func)
+    return button
 
 
 def main():
