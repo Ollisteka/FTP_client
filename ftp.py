@@ -124,8 +124,8 @@ class FTP:
         path = re.findall(r'.*\"/?\\?(.*)\".*', self.pwd())
         return path[0]
 
-    def stor(self, local_path, server_path=None, load_func=None,
-             output_func=None, **kwargs):
+    def add_file(self, local_path, server_path=None, load_func=None,
+                 output_func=None, **kwargs):
         """
         Load file to server
         :param local_path:
@@ -171,7 +171,7 @@ class FTP:
         :return:
         """
         if not download_func:
-            raise Exception("Specify how to download file")
+            raise Exception("Specify how to download_from_server file")
         if self.passive:
             self.pasv()
         else:
@@ -270,7 +270,7 @@ class FTP:
         except Error as e:
             return "Login or password is incorrect"
 
-    def size(self, file_path, silent=False, output_func=None):
+    def size(self, file_path, silent=False, output_func=None, **kwargs):
         """
         Learn a size of a file
         :param file_path:
@@ -302,7 +302,7 @@ class FTP:
         rep = self.send("FEAT" + CRLF)
         return rep
 
-    def mkd(self, directory, **kwargs):
+    def make_directory(self, directory, **kwargs):
         """
         Make new directory
         :param directory:
@@ -312,7 +312,17 @@ class FTP:
         rep = self.send("MKD " + directory + CRLF)
         return rep
 
-    def rmd(self, directory, **kwargs):
+    def mdtm(self, filename, **kwargs):
+        """
+        Return the last-modified time of a specified file.
+        :param filename:
+        :param kwargs:
+        :return:
+        """
+        rep = self.send("MDTM " + filename + CRLF)
+        return rep
+
+    def delete_directory(self, directory, **kwargs):
         """
         Remove directory
         :param directory:
@@ -322,7 +332,7 @@ class FTP:
         rep = self.send("RMD " + directory + CRLF)
         return rep
 
-    def delete(self, file, **kwargs):
+    def delete_file(self, file, **kwargs):
         """
         Delete file
         :param file:
@@ -457,9 +467,10 @@ class FTP:
                          "LIST": self.list,
                          "CDUP": self.cwd_up,
                          "CWD": self.cwd,
-                         "DELE": self.delete,
+                         "DELE": self.delete_file,
                          "HELP": self.help,
-                         "MKD": self.mkd,
+                         "MKD": self.make_directory,
+                         "MDTM": self.mdtm,
                          "NLST": self.nlst,
                          "NOOP": self.noop,
                          "PASS": self.password,
@@ -467,11 +478,11 @@ class FTP:
                          "PWD": self.pwd,
                          "RETR": self.retr,
                          "PORT": self.port,
-                         "RMD": self.rmd,
+                         "RMD": self.delete_directory,
                          "RNFR": self.rename_from,
                          "RNTO": self.rename_to,
                          "SIZE": self.size,
-                         "STOR": self.stor,
+                         "STOR": self.add_file,
                          "SYST": self.syst,
                          "FEAT": self.feat,
                          "OPTS": self.opts,
