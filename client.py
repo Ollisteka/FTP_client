@@ -14,7 +14,6 @@ elif platform == "win32":
     import click
 
 
-
 def main():
     parser = argparse.ArgumentParser(
         usage='{} [OPTIONS]'.format(
@@ -44,11 +43,11 @@ def download_batch(size, new_path, ftp):
     :return:
     """
     with click.progressbar(length=int(size),
-                           label="Downloading file ") as bar:
+                           label="Downloading file ") as progress_bar:
         with open(new_path, 'wb') as file:
             for part in ftp.get_binary_data():
                 file.write(part)
-                bar.update(len(part))
+                progress_bar.update(len(part))
 
 
 def load_batch(size, local_path, ftp):
@@ -57,11 +56,11 @@ def load_batch(size, local_path, ftp):
     :return:
     """
     with click.progressbar(length=int(size),
-                           label="Downloading file ") as bar:
+                           label="Downloading file ") as progress_bar:
         with open(local_path, 'rb') as file:
             for part in file:
                 ftp.data_socket.sendall(part)
-                bar.update(len(part))
+                progress_bar.update(len(part))
 
 
 if __name__ == '__main__':
