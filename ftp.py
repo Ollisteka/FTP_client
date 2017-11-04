@@ -22,6 +22,7 @@ CRLF = '\r\n'
 B_CRLF = b'\r\n'
 
 ENCODING = "cp1251"
+LOCK = threading.Lock()
 
 
 class FTP:
@@ -403,7 +404,7 @@ class FTP:
         :param command:
         :return:
         """
-        with threading.Lock():
+        with LOCK:
             self.control_socket.sendall(command.encode(ENCODING))
         return self.get_reply()
 
@@ -412,7 +413,7 @@ class FTP:
         Get binary data piece by piece
         :return:
         """
-        with threading.Lock():
+        with LOCK:
             while True:
                 try:
                     tmp = self.data_socket.recv(MAXLENGTH)
@@ -427,7 +428,7 @@ class FTP:
         Get a reply from server
         :return:
         """
-        with threading.Lock():
+        with LOCK:
             reply = self.__get_full_reply()
         c = reply[:1]
         if c in {'1', '2', '3'}:
@@ -517,18 +518,21 @@ class FTP:
             if command in self.commands:
                 if arguments:
                     if len(arguments) == 1:
-                        print(self.commands[command](arguments[0],
-                                                     output_func=print,
-                                                     download_func=download_func,
-                                                     load_func=load_func))
+                        print(
+                            self.commands[command](
+                                arguments[0],
+                                output_func=print,
+                                download_func=download_func,
+                                load_func=load_func))
                     if len(arguments) == 2:
-                        print(self.commands[command](arguments[0],
-                                                     arguments[1],
-                                                     output_func=print,
-                                                     download_func=download_func,
-                                                     load_func=load_func))
+                        print(
+                            self.commands[command](
+                                arguments[0],
+                                arguments[1],
+                                output_func=print,
+                                download_func=download_func,
+                                load_func=load_func))
                 else:
                     print(self.commands[command]())
             else:
                 print("UNKNOWN COMMAND")
-
