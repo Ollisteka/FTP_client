@@ -1,4 +1,5 @@
 # !/usr/bin/env python3
+import os
 import sys
 import threading
 from math import sqrt
@@ -9,6 +10,8 @@ from PyQt5.QtWidgets import QFileDialog, QPushButton, QLineEdit, \
 
 from errors import PermanentError
 from ftp import FTP
+
+EXIT = False
 
 
 class LoginWindow(QtWidgets.QDialog):
@@ -73,21 +76,22 @@ class DownloadThread(QtCore.QObject):
     sig_done = QtCore.pyqtSignal(str, bool)
     sig_step = QtCore.pyqtSignal(int)
 
-    def __init__(self, ftp, path, filename, download_from):
+    def __init__(self, ftp, server_path, local_path, download_from):
         super().__init__()
-        self._abort = False
         self._ftp = ftp
-        self._path = path
-        self._filename = filename
+        self._server_path = server_path
+        self._local_path = local_path
         self._download_from = download_from
 
     def work(self):
         if self._download_from:
-            self._ftp.retr(self._path, self._filename,
+            self._ftp.retr(server_path=self._server_path,
+                           local_path=self._local_path,
                            download_func=self.download_from_server)
         else:
             try:
-                self._ftp.add_file(self._filename,
+                self._ftp.add_file(local_path=self._local_path,
+                                   server_path=None,
                                    load_func=self.download_to_server)
             except PermanentError as err:
                 self.sig_done.emit(err.args[0], False)
@@ -96,19 +100,27 @@ class DownloadThread(QtCore.QObject):
         downloaded = 0
         with open(new_path, 'wb') as file:
             for part in ftp.get_binary_data():
+                if EXIT:
+                    exit()
                 downloaded += len(part)
                 self.sig_step.emit(100 * downloaded / int(size))
                 file.write(part)
-        self.sig_done.emit("Download of " + self._path + " is complete", True)
+        self.sig_done.emit(
+            "Download of " +
+            self._server_path +
+            " is complete",
+            True)
 
     def download_to_server(self, size, filename, ftp):
         downloaded = 0
         with open(filename, 'rb') as file:
             for part in file:
+                if EXIT:
+                    exit()
                 downloaded += len(part)
                 self.sig_step.emit(100 * downloaded / int(size))
                 ftp.data_socket.sendall(part)
-        self.sig_done.emit("Download of " + self._filename + " is complete",
+        self.sig_done.emit("Download of " + self._local_path + " is complete",
                            True)
 
 
@@ -152,9 +164,6 @@ class NewFolderWindow(QtWidgets.QDialog):
 class DetailedInfoWindow(QtWidgets.QDialog):
     def __init__(self, ftp, filename, is_file, parent=None):
         super().__init__(parent)
-        self._buttons = QDialogButtonBox(
-
-        )
         self.ftp = ftp
         self.old_filename = filename
 
@@ -268,17 +277,20 @@ class FTPWindow(QtWidgets.QMainWindow):
 
     def closeEvent(self, event):
         if self.thread and self.thread.is_alive():
-            text = "File is being downloaded. Please, wait for it to complete"
-            show_message(text, "Please, wait")
+            text = "File is being downloaded.\nAre you sure you want to exit?"
+            result = QtWidgets.QMessageBox.question(
+                self, "Confirm Exit...", text,
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
             event.ignore()
-            return
-
-        result = QtWidgets.QMessageBox.question(
-            self, "Confirm Exit...", "Are you sure you want to exit ?",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
-        event.ignore()
+        else:
+            result = QtWidgets.QMessageBox.question(
+                self, "Confirm Exit...", "Are you sure you want to exit ?",
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+            event.ignore()
 
         if result == QtWidgets.QMessageBox.Yes:
+            global EXIT
+            EXIT = True
             event.accept()
 
     def print_list(self):
@@ -302,6 +314,8 @@ class FTPWindow(QtWidgets.QMainWindow):
                                 self.make_new_dir, 1)
         self.add_service_button(layout, "Add File",
                                 self.add_file, 2)
+        self.add_service_button(layout, "Download CWD",
+                                self.download_folder, 3)
 
         self.place_file_buttons(files, layout)
 
@@ -385,10 +399,41 @@ class FTPWindow(QtWidgets.QMainWindow):
 
         self.print_list()
 
-    def _download(self, path, filename, download_from):
-        for btn in self._buttons:
-            btn.setDisabled(True)
-        worker = DownloadThread(self._ftp, path, filename, download_from)
+    def download_folder(self):
+        new_folder = QFileDialog.getExistingDirectory(self, "Select Directory")
+
+        if not new_folder:
+            return
+
+        if not os.path.exists(new_folder):
+            os.makedirs(new_folder)
+
+        thread = threading.Thread(
+            target=self.retrieve_files, args=(
+                new_folder,))
+        thread.start()
+
+    def retrieve_files(self, new_folder):
+        all_items = self._ftp.nlst().split('\r\n')
+
+        for item in ["", ".", ".."]:
+            if item in all_items:
+                all_items.remove(item)
+
+        for item in all_items:
+            while self.thread and self.thread.is_alive():
+                if EXIT:
+                    exit()
+                continue
+            if self.check_if_file(item):
+                self.thread = threading.Thread(target=self._download,
+                                               args=(item, new_folder, True))
+                self.thread.start()
+
+    def _download(self, server_path, local_path, download_from):
+        enable_disable_button(self._buttons, True)
+        worker = DownloadThread(self._ftp, server_path,
+                                local_path, download_from)
         worker.sig_step.connect(self._on_part_downloaded)
         worker.sig_done.connect(self._file_downloaded)
         worker.work()
@@ -399,8 +444,7 @@ class FTPWindow(QtWidgets.QMainWindow):
 
     @QtCore.pyqtSlot(str, bool)
     def _file_downloaded(self, value, success):
-        for btn in self._buttons:
-            btn.setDisabled(False)
+        enable_disable_button(self._buttons, False)
         show_message(value, "Success" if success else "Error")
         self.print_list()
 
@@ -430,6 +474,11 @@ class FTPWindow(QtWidgets.QMainWindow):
         except Exception as e:
             show_message(str(e), "Error")
             self.close()
+
+
+def enable_disable_button(buttons, disable):
+    for btn in buttons:
+        btn.setDisabled(disable)
 
 
 def show_message(text, title):
