@@ -19,7 +19,7 @@ class TestWithStubServer(unittest.TestCase):
         self.ftp.connect('localhost', self.port)
 
     def tearDown(self):
-        self.ftp.quit()
+        self.ftp.ftp_quit()
         self.server.stop()
 
     def test_list(self):
@@ -27,7 +27,7 @@ class TestWithStubServer(unittest.TestCase):
         fileB = "B.png"
         self.server.add_file(fileA, "")
         self.server.add_file(fileB, "asd")
-        listing = self.ftp.list()
+        listing = self.ftp.ftp_list()
         self.assertEqual(listing, fileA + '\n' + fileB)
 
     # Sockets unclosed
@@ -35,23 +35,23 @@ class TestWithStubServer(unittest.TestCase):
         fileB = "B.png"
         self.server.add_file(fileB, "asd")
         temp = tempfile.NamedTemporaryFile(delete=False)
-        with mock.patch.object(self.ftp, 'size', return_value=12345):
-            self.ftp.retr(fileB, temp.name, download_func=download_batch)
+        with mock.patch.object(self.ftp, 'ftp_size', return_value=12345):
+            self.ftp.ftp_retr(fileB, temp.name, download_func=download_batch)
         with open(temp.name, 'r') as file:
             data = file.read()
         self.assertEqual(data, "asd")
         temp.close()
 
     def test_pasv(self):
-        reply = self.ftp.pasv()
+        reply = self.ftp.ftp_pasv()
         self.assertEqual(reply.startswith('227 Entering Passive Mode'), True)
 
     def test_cwd_pwd(self):
 
         dir_name = "new_dir"
         expected = '257 "' + dir_name + '" is your current location' + '\r\n'
-        self.ftp.cwd(dir_name)
-        self.assertEqual(self.ftp.pwd(), expected)
+        self.ftp.ftp_cwd(dir_name)
+        self.assertEqual(self.ftp.ftp_pwd(), expected)
 
     def test_welcome(self):
         value = '220 (FtpStubServer 0.1a)\r\n'
@@ -62,7 +62,7 @@ class TestWithStubServer(unittest.TestCase):
     #     with mock.patch.object(self.ftp, '_FTP__get_full_reply',
     #                            return_value=text):
     #         with self.assertRaises(PermanentError):
-    #             self.ftp.list()
+    #             self.ftp.ftp_list()
 
     def test_extract_file_name(self):
         fn = self.ftp._FTP__get_filename(os.path.join("C", "test.txt"))
@@ -74,15 +74,15 @@ class TestWithStubServer(unittest.TestCase):
         size = "123"
         response = "213 " + size
         with mock.patch.object(self.ftp, 'send', return_value=response):
-            self.assertEqual(size, self.ftp.size("asd"))
+            self.assertEqual(size, self.ftp.ftp_size("asd"))
 
     def test_type(self):
-        self.ftp.type("A")
+        self.ftp.ftp_type("A")
         self.assertFalse(self.ftp.binary)
-        self.ftp.type("I")
+        self.ftp.ftp_type("I")
         self.assertTrue(self.ftp.binary)
         with self.assertRaises(Exception):
-            self.ftp.type("E")
+            self.ftp.ftp_type("E")
 
 
 if __name__ == '__main__':

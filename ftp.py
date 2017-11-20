@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
 import getpass
-import inspect
 import os
 import re
 import socket
 import tempfile
 import threading
+import types
 from sys import platform
 
 from errors import PermanentError, ProtectedError, TransientError, Error
@@ -32,7 +32,7 @@ class FTP:
     closed = False
     binary = False
 
-    def quit(self, **kwargs):
+    def ftp_quit(self, **kwargs):
         """
         End the session
         :return:
@@ -45,7 +45,7 @@ class FTP:
         self.control_socket.close()
         return rep
 
-    def pasv(self, output_func=None):
+    def ftp_pasv(self, output_func=None):
         """
         Enters passive mode (server sends the IP)
         :return:
@@ -62,7 +62,7 @@ class FTP:
         self.data_socket.connect((ip_address, port_number))
         return rep
 
-    def port(self, output_func=None):
+    def ftp_port(self, output_func=None):
         """
         Enters active mode (client sends the IP)
         :return:
@@ -78,7 +78,7 @@ class FTP:
             output_func(reply)
         return reply
 
-    def cwd_up(self, **kwargs):
+    def ftp_cdup(self, **kwargs):
         """
         Change to parent directory
         :return:
@@ -86,7 +86,7 @@ class FTP:
         rep = self.send("CDUP" + CRLF)
         return rep
 
-    def cwd(self, directory, **kwargs):
+    def ftp_cwd(self, directory, **kwargs):
         """
         Change directory
         :param directory:
@@ -95,9 +95,9 @@ class FTP:
         rep = self.send("CWD " + directory + CRLF)
         return rep
 
-    def type(self, con_type, **kwargs):
+    def ftp_type(self, con_type, **kwargs):
         """
-        Set type of data transfer
+        Set ftp_type of data transfer
         :param con_type:
         :return:
         """
@@ -123,10 +123,10 @@ class FTP:
         return split[len(split) - 1]
 
     def extract_path_from_pwd_reply(self):
-        path = re.findall(r'.*\"/?\\?(.*)\".*', self.pwd())
+        path = re.findall(r'.*\"/?\\?(.*)\".*', self.ftp_pwd())
         return path[0]
 
-    def add_file(self, local_path, server_path=None, load_func=None,
+    def ftp_stor(self, local_path, server_path=None, load_func=None,
                  output_func=None, **kwargs):
         """
         Load file to server
@@ -138,9 +138,9 @@ class FTP:
         if not load_func:
             raise Exception("Specify how to load file")
         if self.passive:
-            self.pasv()
+            self.ftp_pasv()
         else:
-            self.port()
+            self.ftp_port()
         if not server_path:
             server_path = self.extract_path_from_pwd_reply()
 
@@ -161,8 +161,8 @@ class FTP:
         rep = self.get_reply()
         return rep
 
-    def retr(self, server_path, local_path=None, output_func=None,
-             download_func=None, **kwargs):
+    def ftp_retr(self, server_path, local_path=None, output_func=None,
+                 download_func=None, **kwargs):
         """
         Download file from server file path to a new one
         (or current working directory)
@@ -175,9 +175,9 @@ class FTP:
         if not download_func:
             raise Exception("Specify how to download_from_server file")
         if self.passive:
-            self.pasv()
+            self.ftp_pasv()
         else:
-            self.port()
+            self.ftp_port()
         if not local_path:
             local_path = self.__get_filename(server_path)
 
@@ -186,7 +186,7 @@ class FTP:
         elif os.path.isdir(local_path):
             local_path = os.path.join(local_path,
                                       self.__get_filename(server_path))
-        size = self.size(server_path, silent=True)
+        size = self.ftp_size(server_path, silent=True)
         rep = self.send("RETR " + server_path + CRLF)
         if output_func:
             output_func(rep)
@@ -197,7 +197,7 @@ class FTP:
         rep = self.get_reply()
         return rep
 
-    def nlst(self, output_func=None):
+    def ftp_nlst(self, output_func=None):
         """
         List of items in shorter form
         :param output_func:
@@ -205,7 +205,7 @@ class FTP:
         """
         return self._retr_lines("NLST", output_func)
 
-    def list(self, output_func=None):
+    def ftp_list(self, output_func=None):
         """
         List directories in lon format
         :param output_func:
@@ -219,9 +219,9 @@ class FTP:
         :return:
         """
         if self.passive:
-            self.pasv()
+            self.ftp_pasv()
         else:
-            self.port()
+            self.ftp_port()
         rep = self.send(command + CRLF)
         if output_func:
             output_func(rep)
@@ -236,58 +236,58 @@ class FTP:
             output_func(rep)
         return data
 
-    def user(self, name, **kwargs):
+    def ftp_user(self, name, **kwargs):
         """
-        Send user's login
+        Send ftp_user's login
         :param name:
         :return:
         """
         rep = self.send("USER " + name + CRLF)
         return rep
 
-    def password(self, password=None, **kwargs):
+    def ftp_pass(self, password=None, **kwargs):
         """
-        Send user's password. To enter secure mode you must type PASS and
+        Send ftp_user's ftp_pass. To enter secure mode you must ftp_type PASS and
         press enter.
         :param password:
         :return:
         """
         if not password:
-            password = getpass.getpass("Enter password: ")
+            password = getpass.getpass("Enter ftp_pass: ")
             print()
         rep = self.send("PASS " + password + CRLF)
         return rep
 
     def login(self, login, password):
         """
-        Enters login and password simultaneously
+        Enters login and ftp_pass simultaneously
         :param login:
         :param password:
         :return:
         """
         try:
-            first_rep = self.user(login)
-            second_rep = self.password(password)
+            first_rep = self.ftp_user(login)
+            second_rep = self.ftp_pass(password)
             return first_rep + second_rep
         except Error as e:
-            return "Login or password is incorrect"
+            return "Login or ftp_pass is incorrect"
 
-    def size(self, file_path, silent=False, output_func=None, **kwargs):
+    def ftp_size(self, file_path, silent=False, output_func=None, **kwargs):
         """
-        Learn a size of a file
+        Learn a ftp_size of a file
         :param file_path:
-        :param silent: don't show the size directly
+        :param silent: don't show the ftp_size directly
         :param output_func: where some output will go
         :return:
         """
         if not self.binary:
-            self.type("I")
+            self.ftp_type("I")
         rep, size = self.send("SIZE " + file_path + CRLF).split(' ')
         if not silent and output_func:
             output_func(rep + ' ' + size + 'bytes')
         return size
 
-    def pwd(self, **kwargs):
+    def ftp_pwd(self, **kwargs):
         """
         Get a current working directory
         :return:
@@ -295,16 +295,16 @@ class FTP:
         rep = self.send("PWD" + CRLF)
         return rep
 
-    def feat(self, **kwargs):
+    def ftp_feat(self, **kwargs):
         """
-        Get the feature list implemented by the server.
+        Get the feature ftp_list implemented by the server.
         :param kwargs:
         :return:
         """
         rep = self.send("FEAT" + CRLF)
         return rep
 
-    def make_directory(self, directory, **kwargs):
+    def ftp_mkd(self, directory, **kwargs):
         """
         Make new directory
         :param directory:
@@ -314,7 +314,7 @@ class FTP:
         rep = self.send("MKD " + directory + CRLF)
         return rep
 
-    def mdtm(self, filename, **kwargs):
+    def ftp_mdtm(self, filename, **kwargs):
         """
         Return the last-modified time of a specified file.
         :param filename:
@@ -324,7 +324,7 @@ class FTP:
         rep = self.send("MDTM " + filename + CRLF)
         return rep
 
-    def delete_directory(self, directory, **kwargs):
+    def ftp_rmd(self, directory, **kwargs):
         """
         Remove directory
         :param directory:
@@ -334,7 +334,7 @@ class FTP:
         rep = self.send("RMD " + directory + CRLF)
         return rep
 
-    def delete_file(self, file, **kwargs):
+    def ftp_dele(self, file, **kwargs):
         """
         Delete file
         :param file:
@@ -344,7 +344,7 @@ class FTP:
         rep = self.send("DELE " + file + CRLF)
         return rep
 
-    def rename_from(self, old_name, **kwargs):
+    def ftp_rnfr(self, old_name, **kwargs):
         """
         Rename file or folder. Must be called immediately before RNTO command
         :param old_name:
@@ -354,7 +354,7 @@ class FTP:
         rep = self.send("RNFR " + old_name + CRLF)
         return rep
 
-    def rename_to(self, new_name, **kwargs):
+    def ftp_rnto(self, new_name, **kwargs):
         """
         Rename file or folder. Must be called immediately after RNFR command
         :param new_name:
@@ -364,7 +364,7 @@ class FTP:
         rep = self.send("RNTO " + new_name + CRLF)
         return rep
 
-    def noop(self, **kwargs):
+    def ftp_noop(self, **kwargs):
         """
         Send empty command, to keep connection alive
         :return:
@@ -372,7 +372,7 @@ class FTP:
         rep = self.send("NOOP" + CRLF)
         return rep
 
-    def opts(self, feature, cmd, **kwargs):
+    def ftp_opts(self, feature, cmd, **kwargs):
         """
         Select options for a feature
         :param cmd:
@@ -383,17 +383,17 @@ class FTP:
         rep = self.send(" ".join(["OPTS", feature, cmd]) + CRLF)
         return rep
 
-    def syst(self, **kwargs):
+    def ftp_syst(self, **kwargs):
         """
-        Return system type.
+        Return system ftp_type.
         :return:
         """
         rep = self.send("SYST" + CRLF)
         return rep
 
-    def help(self, **kwargs):
+    def ftp_help(self, **kwargs):
         """
-        Get a help message
+        Get a ftp_help message
         :return:
         """
         rep = self.send("HELP" + CRLF)
@@ -465,33 +465,23 @@ class FTP:
             self.address = (address, port)
         self.control_socket = socket.socket()
         self.passive = passive
-        self.commands = {}
-        self.__add_commands()
+        self.commands = self.__fill_commands()
 
-    def __add_commands(self):
+    @staticmethod
+    def __fill_commands():
         """
-        Checks insides of all the functions, and if finds a command not
-        present in a self.commands - adds it.
+        Adds all FTP commands to a dict :Name -> function:.
         :return:
-        """
-        all_methods = inspect.getmembers(self, predicate=inspect.ismethod)
-        common_funcs = [func for func in all_methods
-                        if not func[0].startswith("_")
-                        and not func[0].startswith("__")
-                        and func[0].upper() not in self.commands]
-        regexps = [
-            re.compile(r'self\.send\(["\'](.+)["\'].+CRLF\)', re.DOTALL),
-            re.compile(r'self._retr_lines\(["\'](.+)["\'].+\)', re.DOTALL)]
-        for item in common_funcs:
-            func_body = "".join(inspect.getsourcelines(item[1])[0])
-            for regexp in regexps:
-                commands = regexp.findall(func_body)
-                if commands:
-                    new_command = [x for x in commands
-                                   if x.upper().strip(" ") not in
-                                   self.commands.keys()]
-                    if new_command:
-                        self.commands[new_command[0].upper().strip()] = item[1]
+        # """
+        commands = {}
+        all_methods = [obj for obj in FTP.__dict__
+                       if isinstance(FTP.__dict__.get(obj), types.FunctionType)
+                       and obj.startswith("ftp_")]
+
+        for method in all_methods:
+            command = method[4:].upper()
+            commands[command] = FTP.__dict__.get(method)
+        return commands
 
     def connect(self, address=None, port=None):
         """
@@ -501,7 +491,7 @@ class FTP:
         if not self.address:
             self.address = (address, port)
         elif not address and not port and not self.address:
-            raise Exception("Address and port must be specified in "
+            raise Exception("Address and ftp_port must be specified in "
                             "constructor or in connect()")
         self.control_socket.connect(self.address)
         self.welcome = self.get_reply()
@@ -521,20 +511,20 @@ class FTP:
                 if arguments:
                     if len(arguments) == 1:
                         print(
-                            self.commands[command](
-                                arguments[0],
-                                output_func=print,
-                                download_func=download_func,
-                                load_func=load_func))
+                            self.commands[command](self,
+                                                   arguments[0],
+                                                   output_func=print,
+                                                   download_func=download_func,
+                                                   load_func=load_func))
                     if len(arguments) == 2:
                         print(
-                            self.commands[command](
-                                arguments[0],
-                                arguments[1],
-                                output_func=print,
-                                download_func=download_func,
-                                load_func=load_func))
+                            self.commands[command](self,
+                                                   arguments[0],
+                                                   arguments[1],
+                                                   output_func=print,
+                                                   download_func=download_func,
+                                                   load_func=load_func))
                 else:
-                    print(self.commands[command]())
+                    print(self.commands[command](self))
             else:
                 print("UNKNOWN COMMAND")

@@ -85,12 +85,12 @@ class DownloadThread(QtCore.QObject):
 
     def work(self):
         if self._download_from:
-            self._ftp.retr(server_path=self._server_path,
-                           local_path=self._local_path,
-                           download_func=self.download_from_server)
+            self._ftp.ftp_retr(server_path=self._server_path,
+                               local_path=self._local_path,
+                               download_func=self.download_from_server)
         else:
             try:
-                self._ftp.add_file(local_path=self._local_path,
+                self._ftp.ftp_stor(local_path=self._local_path,
                                    server_path=None,
                                    load_func=self.download_to_server)
             except PermanentError as err:
@@ -153,7 +153,7 @@ class NewFolderWindow(QtWidgets.QDialog):
 
     def make_new_directory(self):
         try:
-            self.ftp.make_directory(self.new_folder.text())
+            self.ftp.ftp_mkd(self.new_folder.text())
             self.parent().print_list()
             self.close()
         except PermanentError as err:
@@ -177,8 +177,8 @@ class DetailedInfoWindow(QtWidgets.QDialog):
 
         for button in [make_button("Rename", self.rename),
                        make_button("Delete",
-                                   lambda x=self.ftp.delete_file if is_file
-                                   else self.ftp.delete_directory:
+                                   lambda x=self.ftp.ftp_dele if is_file
+                                   else self.ftp.ftp_rmd:
                                    self.delete(x),
                                    ),
                        make_button("Cancel", self.close)]:
@@ -189,10 +189,10 @@ class DetailedInfoWindow(QtWidgets.QDialog):
         layout = QGridLayout()
         layout.setSpacing(5)
         layout.addWidget(QLabel("Last modified: "), 0, 0)
-        layout.addWidget(QLabel(self.extract_date(self.ftp.mdtm(
+        layout.addWidget(QLabel(self.extract_date(self.ftp.ftp_mdtm(
             self.old_filename))), 0, 1)
         layout.addWidget(QLabel("Size: "), 1, 0)
-        size = self.ftp.size(self.old_filename).strip('\n')
+        size = self.ftp.ftp_size(self.old_filename).strip('\n')
         layout.addWidget(QLabel(size + ' bytes'), 1, 1)
         layout.addWidget(QLabel("Rename to: "), 2, 0)
         layout.addWidget(self.new_filename, 2, 1)
@@ -223,8 +223,8 @@ class DetailedInfoWindow(QtWidgets.QDialog):
 
     def rename(self):
         try:
-            self.ftp.rename_from(self.old_filename)
-            self.ftp.rename_to(self.new_filename.text())
+            self.ftp.ftp_rnfr(self.old_filename)
+            self.ftp.ftp_rnto(self.new_filename.text())
             self.parent().print_list()
             self.close()
         except PermanentError as err:
@@ -297,7 +297,7 @@ class FTPWindow(QtWidgets.QMainWindow):
         if self.thread and self.thread.is_alive():
             return
 
-        files = self._ftp.nlst().split('\r\n')
+        files = self._ftp.ftp_nlst().split('\r\n')
 
         for item in ["", ".", ".."]:
             if item in files:
@@ -375,8 +375,8 @@ class FTPWindow(QtWidgets.QMainWindow):
 
     def check_if_file(self, path):
         try:
-            self._ftp.cwd(path)
-            self._ftp.cwd("..")
+            self._ftp.ftp_cwd(path)
+            self._ftp.ftp_cwd("..")
             return False
         except PermanentError:
             return True
@@ -385,7 +385,7 @@ class FTPWindow(QtWidgets.QMainWindow):
         if self.thread and self.thread.is_alive():
             return
         try:
-            self._ftp.cwd(path)
+            self._ftp.ftp_cwd(path)
         except PermanentError as err:
             options = QFileDialog.Options()
             options |= QFileDialog.DontUseNativeDialog
@@ -414,7 +414,7 @@ class FTPWindow(QtWidgets.QMainWindow):
         thread.start()
 
     def retrieve_files(self, new_folder):
-        all_items = self._ftp.nlst().split('\r\n')
+        all_items = self._ftp.ftp_nlst().split('\r\n')
 
         for item in ["", ".", ".."]:
             if item in all_items:
