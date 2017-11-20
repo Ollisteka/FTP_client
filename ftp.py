@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import getpass
+import inspect
 import os
 import re
 import socket
@@ -467,14 +468,14 @@ class FTP:
         self.commands = {"QUIT": self.quit,
                          "LIST": self.list,
                          "CDUP": self.cwd_up,
-                         "CWD": self.cwd,
+                         # "CWD": self.cwd,
                          "DELE": self.delete_file,
-                         "HELP": self.help,
+                         # "HELP": self.help,
                          "MKD": self.make_directory,
                          "MDTM": self.mdtm,
                          "NLST": self.nlst,
                          "NOOP": self.noop,
-                         "PASS": self.password,
+                         #  "PASS": self.password,
                          "PASV": self.pasv,
                          "PWD": self.pwd,
                          "RETR": self.retr,
@@ -488,8 +489,31 @@ class FTP:
                          "FEAT": self.feat,
                          "OPTS": self.opts,
                          "TYPE": self.type,
-                         "USER": self.user,
+                         # "USER": self.user,
                          }
+        self.__add_missing_commands()
+
+    def __add_missing_commands(self):
+        """
+        Checks insides of all the functions, and if finds a command not
+        present in a self.commands - adds it.
+        :return:
+        """
+        all_methods = inspect.getmembers(self, predicate=inspect.ismethod)
+        common_funcs = [func for func in all_methods
+                        if not func[0].startswith("_")
+                        and not func[0].startswith("__")
+                        and func[0].upper() not in self.commands]
+        regexp = re.compile(r'self\.send\(["\'](.+)["\'].+CRLF\)', re.DOTALL)
+        for item in common_funcs:
+            func_body = "".join(inspect.getsourcelines(item[1])[0])
+            commands = regexp.findall(func_body)
+            if commands:
+                new_command = [x for x in commands
+                               if x.upper().strip(" ") not in
+                               self.commands.keys()]
+                if new_command:
+                    self.commands[new_command[0].upper().strip()] = item[1]
 
     def connect(self, address=None, port=None):
         """
@@ -513,7 +537,7 @@ class FTP:
         while not self.closed:
             print("Type a command:")
             inp = input().split(' ')
-            command = inp[0]
+            command = inp[0].upper()
             arguments = inp[1:]
             if command in self.commands:
                 if arguments:
