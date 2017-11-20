@@ -465,35 +465,10 @@ class FTP:
             self.address = (address, port)
         self.control_socket = socket.socket()
         self.passive = passive
-        self.commands = {"QUIT": self.quit,
-                         "LIST": self.list,
-                         "CDUP": self.cwd_up,
-                         # "CWD": self.cwd,
-                         "DELE": self.delete_file,
-                         # "HELP": self.help,
-                         "MKD": self.make_directory,
-                         "MDTM": self.mdtm,
-                         "NLST": self.nlst,
-                         "NOOP": self.noop,
-                         #  "PASS": self.password,
-                         "PASV": self.pasv,
-                         "PWD": self.pwd,
-                         "RETR": self.retr,
-                         "PORT": self.port,
-                         "RMD": self.delete_directory,
-                         "RNFR": self.rename_from,
-                         "RNTO": self.rename_to,
-                         "SIZE": self.size,
-                         "STOR": self.add_file,
-                         "SYST": self.syst,
-                         "FEAT": self.feat,
-                         "OPTS": self.opts,
-                         "TYPE": self.type,
-                         # "USER": self.user,
-                         }
-        self.__add_missing_commands()
+        self.commands = {}
+        self.__add_commands()
 
-    def __add_missing_commands(self):
+    def __add_commands(self):
         """
         Checks insides of all the functions, and if finds a command not
         present in a self.commands - adds it.
@@ -504,16 +479,19 @@ class FTP:
                         if not func[0].startswith("_")
                         and not func[0].startswith("__")
                         and func[0].upper() not in self.commands]
-        regexp = re.compile(r'self\.send\(["\'](.+)["\'].+CRLF\)', re.DOTALL)
+        regexps = [
+            re.compile(r'self\.send\(["\'](.+)["\'].+CRLF\)', re.DOTALL),
+            re.compile(r'self._retr_lines\(["\'](.+)["\'].+\)', re.DOTALL)]
         for item in common_funcs:
             func_body = "".join(inspect.getsourcelines(item[1])[0])
-            commands = regexp.findall(func_body)
-            if commands:
-                new_command = [x for x in commands
-                               if x.upper().strip(" ") not in
-                               self.commands.keys()]
-                if new_command:
-                    self.commands[new_command[0].upper().strip()] = item[1]
+            for regexp in regexps:
+                commands = regexp.findall(func_body)
+                if commands:
+                    new_command = [x for x in commands
+                                   if x.upper().strip(" ") not in
+                                   self.commands.keys()]
+                    if new_command:
+                        self.commands[new_command[0].upper().strip()] = item[1]
 
     def connect(self, address=None, port=None):
         """
