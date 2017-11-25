@@ -14,6 +14,66 @@ from ftp import FTP
 EXIT = False
 
 
+class FTPAdapter:
+    def __init__(self, address=None, port=None, passive=True):
+        self.__ftp = FTP(address, port, passive)
+
+    def login(self, username, password):
+        return self.__ftp.login(username, password)
+
+    def connect(self, address=None, port=None):
+        return self.__ftp.connect(address, port)
+
+    def get_files_list(self):
+        files = self.__ftp.ftp_nlst().split('\r\n')
+
+        for item in ["", ".", ".."]:
+            if item in files:
+                files.remove(item)
+
+        return files
+
+    def check_if_file(self, path):
+        try:
+            self.__ftp.ftp_cwd(path)
+            self.__ftp.ftp_cwd("..")
+            return False
+        except PermanentError:
+            return True
+
+    def delete_file(self, path):
+        return self.__ftp.ftp_dele(path)
+
+    def delete_folder(self, path):
+        return self.__ftp.ftp_rmd(path)
+
+    def get_last_modified_time(self, path):
+        return self.__ftp.ftp_mdtm(path)
+
+    def get_size(self, path):
+        return self.__ftp.ftp_size(path).strip('\n')
+
+    def rename(self, old_path, new_path):
+        self.__ftp.ftp_rnfr(old_path)
+        return self.__ftp.ftp_rnto(new_path)
+
+    def make_new_folder(self, path):
+        return self.__ftp.ftp_mkd(path)
+
+    def change_folder(self, path):
+        return self.__ftp.ftp_cwd(path)
+
+    def get_data(self, server_path, local_path=None,
+                 output_func=None, download_func=None):
+        return self.__ftp.ftp_retr(server_path, local_path,
+                                   output_func, download_func)
+
+    def store_data(self, local_path, server_path=None,
+                   load_func=None, output_func=None):
+        return self.__ftp.ftp_stor(local_path, server_path,
+                                   load_func, output_func)
+
+
 class LoginWindow(QtWidgets.QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -77,6 +137,13 @@ class DownloadThread(QtCore.QObject):
     sig_step = QtCore.pyqtSignal(int)
 
     def __init__(self, ftp, server_path, local_path, download_from):
+        """
+
+        :type ftp: FTPAdapter
+        :param server_path:
+        :param local_path:
+        :param download_from:
+        """
         super().__init__()
         self._ftp = ftp
         self._server_path = server_path
@@ -85,18 +152,25 @@ class DownloadThread(QtCore.QObject):
 
     def work(self):
         if self._download_from:
-            self._ftp.ftp_retr(server_path=self._server_path,
+            self._ftp.get_data(server_path=self._server_path,
                                local_path=self._local_path,
                                download_func=self.download_from_server)
         else:
             try:
-                self._ftp.ftp_stor(local_path=self._local_path,
-                                   server_path=None,
-                                   load_func=self.download_to_server)
+                self._ftp.store_data(local_path=self._local_path,
+                                     server_path=None,
+                                     load_func=self.download_to_server)
             except PermanentError as err:
                 self.sig_done.emit(err.args[0], False)
 
     def download_from_server(self, size, new_path, ftp):
+        """
+
+        :param size:
+        :param new_path:
+        :type ftp: FTP
+        :return:
+        """
         downloaded = 0
         with open(new_path, 'wb') as file:
             for part in ftp.get_binary_data():
@@ -112,6 +186,13 @@ class DownloadThread(QtCore.QObject):
             True)
 
     def download_to_server(self, size, filename, ftp):
+        """
+
+        :param size:
+        :param new_path:
+        :type ftp: FTP
+        :return:
+        """
         downloaded = 0
         with open(filename, 'rb') as file:
             for part in file:
@@ -126,6 +207,11 @@ class DownloadThread(QtCore.QObject):
 
 class NewFolderWindow(QtWidgets.QDialog):
     def __init__(self, ftp, parent=None):
+        """
+
+        :type ftp: FTPAdapter
+        :param parent:
+        """
         super().__init__(parent)
 
         self.ftp = ftp
@@ -153,7 +239,7 @@ class NewFolderWindow(QtWidgets.QDialog):
 
     def make_new_directory(self):
         try:
-            self.ftp.ftp_mkd(self.new_folder.text())
+            self.ftp.make_new_folder(self.new_folder.text())
             self.parent().print_list()
             self.close()
         except PermanentError as err:
@@ -163,6 +249,13 @@ class NewFolderWindow(QtWidgets.QDialog):
 
 class DetailedInfoWindow(QtWidgets.QDialog):
     def __init__(self, ftp, filename, is_file, parent=None):
+        """
+
+        :type ftp: FTPAdapter
+        :param filename:
+        :param is_file:
+        :param parent:
+        """
         super().__init__(parent)
         self.ftp = ftp
         self.old_filename = filename
@@ -177,8 +270,8 @@ class DetailedInfoWindow(QtWidgets.QDialog):
 
         for button in [make_button("Rename", self.rename),
                        make_button("Delete",
-                                   lambda x=self.ftp.ftp_dele if is_file
-                                   else self.ftp.ftp_rmd:
+                                   lambda x=self.ftp.delete_file if is_file
+                                   else self.ftp.delete_folder:
                                    self.delete(x),
                                    ),
                        make_button("Cancel", self.close)]:
@@ -189,10 +282,10 @@ class DetailedInfoWindow(QtWidgets.QDialog):
         layout = QGridLayout()
         layout.setSpacing(5)
         layout.addWidget(QLabel("Last modified: "), 0, 0)
-        layout.addWidget(QLabel(self.extract_date(self.ftp.ftp_mdtm(
-            self.old_filename))), 0, 1)
+        layout.addWidget(QLabel(self.extract_date(
+            self.ftp.get_last_modified_time(self.old_filename))), 0, 1)
         layout.addWidget(QLabel("Size: "), 1, 0)
-        size = self.ftp.ftp_size(self.old_filename).strip('\n')
+        size = self.ftp.get_size(self.old_filename)
         layout.addWidget(QLabel(size + ' bytes'), 1, 1)
         layout.addWidget(QLabel("Rename to: "), 2, 0)
         layout.addWidget(self.new_filename, 2, 1)
@@ -223,8 +316,7 @@ class DetailedInfoWindow(QtWidgets.QDialog):
 
     def rename(self):
         try:
-            self.ftp.ftp_rnfr(self.old_filename)
-            self.ftp.ftp_rnto(self.new_filename.text())
+            self.ftp.rename(self.old_filename, self.new_filename.text())
             self.parent().print_list()
             self.close()
         except PermanentError as err:
@@ -271,7 +363,7 @@ class FTPWindow(QtWidgets.QMainWindow):
         self.statusBar().addPermanentWidget(self.progressBar)
         self.statusBar().showMessage("Waiting for params...")
 
-        self._ftp = FTP()
+        self._ftp = FTPAdapter()
 
         self._buttons = []
 
@@ -297,11 +389,7 @@ class FTPWindow(QtWidgets.QMainWindow):
         if self.thread and self.thread.is_alive():
             return
 
-        files = self._ftp.ftp_nlst().split('\r\n')
-
-        for item in ["", ".", ".."]:
-            if item in files:
-                files.remove(item)
+        files = self._ftp.get_files_list()
 
         layout = QGridLayout()
         layout.setSpacing(5)
@@ -342,7 +430,7 @@ class FTPWindow(QtWidgets.QMainWindow):
 
                 button = make_button(item, lambda x=item: self._move(x))
 
-                is_file = self.check_if_file(item)
+                is_file = self._ftp.check_if_file(item)
 
                 button.setStyleSheet('background-color: orange' if is_file
                                      else 'background-color: yellow')
@@ -373,19 +461,11 @@ class FTPWindow(QtWidgets.QMainWindow):
                                            args=(None, filename, False))
             self.thread.start()
 
-    def check_if_file(self, path):
-        try:
-            self._ftp.ftp_cwd(path)
-            self._ftp.ftp_cwd("..")
-            return False
-        except PermanentError:
-            return True
-
     def _move(self, path):
         if self.thread and self.thread.is_alive():
             return
         try:
-            self._ftp.ftp_cwd(path)
+            self._ftp.change_folder(path)
         except PermanentError as err:
             options = QFileDialog.Options()
             options |= QFileDialog.DontUseNativeDialog
@@ -414,18 +494,14 @@ class FTPWindow(QtWidgets.QMainWindow):
         thread.start()
 
     def retrieve_files(self, new_folder):
-        all_items = self._ftp.ftp_nlst().split('\r\n')
-
-        for item in ["", ".", ".."]:
-            if item in all_items:
-                all_items.remove(item)
+        all_items = self._ftp.get_files_list()
 
         for item in all_items:
             while self.thread and self.thread.is_alive():
                 if EXIT:
                     exit()
                 continue
-            if self.check_if_file(item):
+            if self._ftp.check_if_file(item):
                 self.thread = threading.Thread(target=self._download,
                                                args=(item, new_folder, True))
                 self.thread.start()
